@@ -3,15 +3,15 @@ import db from '../db/schema.js';
 
 const AppContext = createContext(null);
 
-export function AppProvider({ children }) {
-  const [species, setSpecies]       = useState('all');
-  const [currency, setCurrency]     = useState('KES');
-  const [language, setLanguage]     = useState('en');
-  const [theme, setTheme]           = useState('light');
-  const [farmName, setFarmName]     = useState('Kilima Fresh Farms');
-  const [currentUser, setCurrentUser] = useState({ name: 'James Mwangi', role: 'manager' });
+export function AppProvider({ children, farmId }) {
+  const [species, setSpecies]     = useState('all');
+  const [currency, setCurrency]   = useState('KES');
+  const [language, setLanguage]   = useState('en');
+  const [theme, setTheme]         = useState('light');
+  const [farmName, setFarmName]   = useState('My Farm');
+  const [currentUser, setCurrentUser] = useState({ name: 'User', role: 'worker' });
   const [syncStatus, setSyncStatus] = useState('synced');
-  const [isOnline, setIsOnline]     = useState(navigator.onLine);
+  const [isOnline, setIsOnline]   = useState(navigator.onLine);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeSpecies, setActiveSpecies] = useState(['cattle','pigs','goats','sheep','poultry']);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -31,20 +31,24 @@ export function AppProvider({ children }) {
         if (r.key === 'currency')      setCurrency(r.value);
         if (r.key === 'language')      setLanguage(r.value);
         if (r.key === 'theme')         setTheme(r.value);
-        if (r.key === 'currentUser')   setCurrentUser(JSON.parse(r.value));
-        if (r.key === 'activeSpecies') setActiveSpecies(JSON.parse(r.value));
+        if (r.key === 'currentUser')   { try { setCurrentUser(JSON.parse(r.value)); } catch(e){} }
+        if (r.key === 'activeSpecies') { try { setActiveSpecies(JSON.parse(r.value)); } catch(e){} }
       });
-    });
-    db.notifications.where('read').equals(0).count().then(setUnreadCount);
-  }, []);
+    }).catch(()=>{});
+    db.notifications?.where('read').equals(0).count().then(setUnreadCount).catch(()=>{});
+  }, [farmId]);
 
   const saveSetting = useCallback(async (key, value) => {
-    await db.settings.where('key').equals(key).modify({ value: typeof value === 'object' ? JSON.stringify(value) : value });
+    try {
+      await db.settings.where('key').equals(key).modify({ value: typeof value === 'object' ? JSON.stringify(value) : value });
+    } catch(e) {}
   }, []);
 
   const formatCurrency = useCallback((amount) => {
-    if (currency === 'KES') return `KES ${Number(amount).toLocaleString()}`;
-    return `$${(Number(amount) / 130).toFixed(2)}`;
+    const n = Number(amount) || 0;
+    if (currency === 'KES') return `KES ${n.toLocaleString()}`;
+    if (currency === 'USD') return `$${(n / 130).toFixed(2)}`;
+    return `${currency} ${n.toLocaleString()}`;
   }, [currency]);
 
   const value = {
@@ -60,6 +64,7 @@ export function AppProvider({ children }) {
     activeSpecies, setActiveSpecies,
     sidebarOpen, setSidebarOpen,
     saveSetting, formatCurrency,
+    farmId,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
