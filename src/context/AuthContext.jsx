@@ -16,18 +16,14 @@ export function AuthProvider({ children }) {
   const loadProfile = useCallback(async (userId) => {
     try {
       const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+        .from('profiles').select('*').eq('id', userId).maybeSingle();
       setProfile(data);
       return data;
-    } catch (e) {
-      return null;
-    }
+    } catch { return null; }
   }, []);
 
   const loadFarmData = useCallback(async (userId) => {
+    // Run entirely in background — never block the UI
     try {
       const { data: fu } = await supabase
         .from('farm_users')
@@ -35,58 +31,62 @@ export function AuthProvider({ children }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (!fu) return; // no farm yet — show onboarding
-
+      if (!fu) return;
       setFarmUser(fu);
       setFarm(fu.farms);
 
       const { data: lic } = await supabase
-        .from('licenses')
-        .select('*')
-        .eq('farm_id', fu.farm_id)
-        .maybeSingle();
-
+        .from('licenses').select('*')
+        .eq('farm_id', fu.farm_id).maybeSingle();
       setLicense(lic);
 
-      // Sync with hard 10s timeout — never blocks UI
-      setSyncStatus('syncing');
-      await Promise.race([
-        initialPull(fu.farm_id),
-        new Promise(resolve => setTimeout(resolve, 10000))
-      ]);
-      setSyncStatus('synced');
-
-      startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));
+      // Sync silently in background — never awaited by UI
+      setTimeout(() => {
+        initialPull(fu.farm_id)
+          .catch(e => console.warn('[Sync] background pull failed:', e))
+          .finally(() => {
+            startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));
+          });
+      }, 500);
     } catch (err) {
       console.warn('[Auth] loadFarmData:', err.message);
-    } finally {
-      setSyncStatus('synced');
     }
   }, []);
 
-  // Restore session on mount
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       try {
         if (session?.user) {
           setUser(session.user);
-          await loadProfile(session.user.id);
-          await loadFarmData(session.user.id);
+          // Load profile and farm in parallel — then immediately show app
+          const [prof] = await Promise.all([
+            loadProfile(session.user.id),
+          ]);
+          // Don't await loadFarmData — fire and forget
+          loadFarmData(session.user.id);
         }
       } catch (e) {
-        console.warn('[Auth] session restore error:', e);
+        console.warn('[Auth] init error:', e);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false); // Always unblock UI
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
         if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user);
-          await loadProfile(session.user.id);
-          await loadFarmData(session.user.id);
-          setLoading(false);
+          setLoading(true);
+          try {
+            await loadProfile(session.user.id);
+            loadFarmData(session.user.id); // fire and forget
+          } finally {
+            if (mounted) setLoading(false);
+          }
         } else if (event === 'SIGNED_OUT') {
           setUser(null); setProfile(null); setFarm(null);
           setLicense(null); setFarmUser(null);
@@ -95,7 +95,11 @@ export function AuthProvider({ children }) {
         }
       }
     );
-    return () => subscription.unsubscribe();
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [loadFarmData, loadProfile]);
 
   const signUp = async ({ email, password, fullName }) => {
@@ -124,40 +128,29 @@ export function AuthProvider({ children }) {
     const { data: newFarm, error: farmErr } = await supabase
       .from('farms')
       .insert({ name, county, currency, active_species: activeSpecies })
-      .select()
-      .single();
+      .select().single();
     if (farmErr) throw farmErr;
 
-    const { error: fuErr } = await supabase
-      .from('farm_users')
+    await supabase.from('farm_users')
       .insert({ farm_id: newFarm.id, user_id: user.id, role: 'owner' });
-    if (fuErr) throw fuErr;
 
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 14);
 
-    const { data: newLicense, error: licErr } = await supabase
+    const { data: newLicense } = await supabase
       .from('licenses')
       .insert({
-        farm_id: newFarm.id,
-        tier: 'trial',
-        status: 'active',
-        animal_limit: 50,
-        user_limit: 2,
+        farm_id: newFarm.id, tier: 'trial', status: 'active',
+        animal_limit: 50, user_limit: 2,
         trial_ends_at: trialEnd.toISOString(),
         current_period_end: trialEnd.toISOString(),
         activated_by: user.id,
-      })
-      .select()
-      .single();
-    if (licErr) throw licErr;
+      }).select().single();
 
-    await supabase.from('license_events').insert({
-      farm_id: newFarm.id,
-      event_type: 'trial_start',
-      new_tier: 'trial',
-      created_by: user.id,
-    }).catch(() => {}); // non-critical
+    supabase.from('license_events').insert({
+      farm_id: newFarm.id, event_type: 'trial_start',
+      new_tier: 'trial', created_by: user.id,
+    }).catch(() => {});
 
     setFarm(newFarm);
     setLicense(newLicense);
@@ -166,11 +159,8 @@ export function AuthProvider({ children }) {
 
   const refreshLicense = async () => {
     if (!farm) return;
-    const { data } = await supabase
-      .from('licenses')
-      .select('*')
-      .eq('farm_id', farm.id)
-      .maybeSingle();
+    const { data } = await supabase.from('licenses')
+      .select('*').eq('farm_id', farm.id).maybeSingle();
     setLicense(data);
   };
 
@@ -182,8 +172,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, farm, license, farmUser,
-      loading, syncStatus,
-      isSuperAdmin,
+      loading, syncStatus, isSuperAdmin,
       signUp, signIn, signOut,
       createFarm, refreshLicense,
     }}>
