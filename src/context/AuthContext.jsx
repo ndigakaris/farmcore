@@ -44,17 +44,25 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      try {
-        if (session?.user) {
-          setUser(session.user);
-          await loadProfile(session.user.id);
-          loadFarmData(session.user.id); // intentionally not awaited
-        }
-      } catch (e) { console.warn('[Auth] init:', e); }
-      finally { if (mounted) setLoading(false); }
-    });
+   // Hard 3-second timeout — app ALWAYS loads
+const hardTimeout = setTimeout(() => {
+  if (mounted) setLoading(false);
+}, 3000);
+
+supabase.auth.getSession().then(async ({ data: { session } }) => {
+  if (!mounted) return;
+  try {
+    if (session?.user) {
+      setUser(session.user);
+      await loadProfile(session.user.id);
+      loadFarmData(session.user.id);
+    }
+  } catch (e) { console.warn('[Auth] init:', e); }
+  finally {
+    clearTimeout(hardTimeout);
+    if (mounted) setLoading(false);
+  }
+});
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
