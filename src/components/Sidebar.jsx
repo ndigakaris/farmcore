@@ -1,11 +1,12 @@
 import { useApp } from '../context/AppContext.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 import { SYNC_STATUS } from '../constants/index.js';
 import { cn } from '../utils/index.js';
 import {
   LayoutDashboard, Beef, Droplets, Stethoscope, Heart, Wheat,
   DollarSign, Users, Calendar, BarChart3, Settings, Package,
   Tractor, FlaskConical, Bell, ChevronLeft, ChevronRight,
-  Wifi, WifiOff, AlertCircle
+  Wifi, WifiOff, UserCog
 } from 'lucide-react';
 
 const NAV = [
@@ -26,33 +27,34 @@ const NAV = [
     { id:'calendar',     label:'Farm Calendar',   icon:Calendar },
     { id:'lab',          label:'Laboratory',      icon:FlaskConical },
     { id:'reports',      label:'Reports',         icon:BarChart3 },
+  ]},
+  { section: 'Account', items: [
+    { id:'team',         label:'Team & Roles',    icon:UserCog },
+    { id:'notifications',label:'Notifications',   icon:Bell, badge:true },
     { id:'settings',     label:'Settings',        icon:Settings },
   ]},
 ];
 
 export default function Sidebar({ active, onNav }) {
   const { farmName, syncStatus, isOnline, unreadCount, sidebarOpen, setSidebarOpen } = useApp();
+  const { farm, farmUser } = useAuth();
   const sync = SYNC_STATUS[syncStatus] || SYNC_STATUS.synced;
 
   return (
-    <div className={cn(
-      'flex flex-col h-full transition-all duration-200 flex-shrink-0',
-      sidebarOpen ? 'w-56' : 'w-14'
-    )} style={{ background:'#2D5016', color:'#fff' }}>
+    <div className={cn('flex flex-col h-full transition-all duration-200 flex-shrink-0', sidebarOpen?'w-56':'w-14')}
+      style={{background:'#2D5016'}}>
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-white/10">
         <span className="text-2xl flex-shrink-0">🌾</span>
         {sidebarOpen && (
-          <div className="min-w-0">
-            <h1 style={{fontFamily:'Fraunces,serif'}} className="text-lg font-semibold text-white leading-none">FarmCore</h1>
-            <p className="text-[10px] text-white/50 truncate mt-0.5">{farmName}</p>
+          <div className="min-w-0 flex-1">
+            <h1 style={{fontFamily:'Fraunces,serif'}} className="text-base font-semibold text-white leading-none truncate">FarmCore</h1>
+            <p className="text-[10px] text-white/50 truncate mt-0.5">{farm?.name || farmName}</p>
           </div>
         )}
-        <button
-          onClick={() => setSidebarOpen(v => !v)}
-          className="ml-auto p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0"
-        >
-          {sidebarOpen ? <ChevronLeft size={14} className="text-white/60"/> : <ChevronRight size={14} className="text-white/60"/>}
+        <button onClick={()=>setSidebarOpen(v=>!v)}
+          className="p-1 rounded hover:bg-white/10 transition-colors flex-shrink-0">
+          {sidebarOpen?<ChevronLeft size={14} className="text-white/60"/>:<ChevronRight size={14} className="text-white/60"/>}
         </button>
       </div>
 
@@ -69,21 +71,16 @@ export default function Sidebar({ active, onNav }) {
               const Icon = item.icon;
               const isActive = active === item.id;
               return (
-                <button
-                  key={item.id}
-                  onClick={() => onNav(item.id)}
-                  title={!sidebarOpen ? item.label : undefined}
-                  className={cn(
-                    'w-full flex items-center gap-2.5 px-4 py-2 transition-all duration-150 text-sm border-l-[3px] text-left',
-                    isActive
-                      ? 'bg-white/15 text-white border-[#C9A84C]'
-                      : 'text-white/65 border-transparent hover:bg-white/8 hover:text-white'
-                  )}
-                >
-                  <Icon size={16} className="flex-shrink-0" />
-                  {sidebarOpen && <span className="truncate">{item.label}</span>}
-                  {sidebarOpen && item.id === 'notifications' && unreadCount > 0 && (
-                    <span className="ml-auto text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">{unreadCount}</span>
+                <button key={item.id} onClick={()=>onNav(item.id)}
+                  title={!sidebarOpen?item.label:undefined}
+                  className={cn('w-full flex items-center gap-2.5 px-4 py-2 transition-all duration-150 text-sm border-l-[3px] text-left',
+                    isActive?'bg-white/15 text-white border-[#C9A84C]':'text-white/65 border-transparent hover:bg-white/10 hover:text-white')}>
+                  <Icon size={16} className="flex-shrink-0"/>
+                  {sidebarOpen && <span className="truncate flex-1">{item.label}</span>}
+                  {sidebarOpen && item.badge && unreadCount>0 && (
+                    <span className="text-[10px] bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+                      {unreadCount>9?'9+':unreadCount}
+                    </span>
                   )}
                 </button>
               );
@@ -92,20 +89,21 @@ export default function Sidebar({ active, onNav }) {
         ))}
       </div>
 
-      {/* Sync status */}
-      <div className={cn('px-3 py-3 border-t border-white/10', !sidebarOpen && 'flex justify-center')}>
+      {/* Role + sync */}
+      <div className={cn('px-3 py-3 border-t border-white/10', !sidebarOpen&&'flex justify-center')}>
         {sidebarOpen ? (
           <div className="bg-black/20 rounded-lg px-3 py-2">
+            {farmUser?.role && (
+              <p className="text-[10px] text-white/40 mb-1 capitalize">Role: <span className="text-white/70">{farmUser.role}</span></p>
+            )}
             <div className="flex items-center gap-2">
-              {isOnline ? <Wifi size={12} className="text-green-400"/> : <WifiOff size={12} className="text-red-400"/>}
+              {isOnline?<Wifi size={12} className="text-green-400"/>:<WifiOff size={12} className="text-red-400"/>}
               <span className="text-xs text-white/70 flex-1 truncate">{sync.label}</span>
-              <span style={{ color: sync.color }} className="text-[10px]">●</span>
+              <span style={{color:sync.color}} className="text-[10px]">●</span>
             </div>
           </div>
         ) : (
-          isOnline
-            ? <Wifi size={16} className="text-green-400"/>
-            : <WifiOff size={16} className="text-red-400"/>
+          isOnline?<Wifi size={16} className="text-green-400"/>:<WifiOff size={16} className="text-red-400"/>
         )}
       </div>
     </div>
