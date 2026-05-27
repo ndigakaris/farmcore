@@ -147,10 +147,12 @@ export function AuthProvider({ children }) {
         activated_by: user.id,
       }).select().single();
 
-    supabase.from('license_events').insert({
-      farm_id: newFarm.id, event_type: 'trial_start',
-      new_tier: 'trial', created_by: user.id,
-    }).catch(() => {});
+    try {
+  await supabase.from('license_events').insert({
+    farm_id: newFarm.id, event_type: 'trial_start',
+    new_tier: 'trial', created_by: user.id,
+  });
+} catch(e) {}
 
     setFarm(newFarm);
     setLicense(newLicense);
