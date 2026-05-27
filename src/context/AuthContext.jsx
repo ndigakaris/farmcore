@@ -39,9 +39,14 @@ export function AuthProvider({ children }) {
       setLicense(lic);
 
       // Initial data sync
-      setSyncStatus('syncing');
-      await initialPull(fu.farm_id);
-      setSyncStatus('synced');
+     setSyncStatus('syncing');
+try {
+  await initialPull(fu.farm_id);
+} catch(e) {
+  console.warn('Sync failed:', e);
+} finally {
+  setSyncStatus('synced');
+}
 
       // Start background sync
       startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));

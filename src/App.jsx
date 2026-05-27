@@ -103,13 +103,9 @@ function AuthRouter() {
   const { user, farm, license, loading, syncStatus, isSuperAdmin } = useAuth();
 
   // 1. Loading / initial sync
-  if (loading || syncStatus === 'syncing') return <SyncScreen/>;
-
-  // 2. Not logged in
-  if (!user) return <AuthPage/>;
-
-  // 3. Super admin → Admin Dashboard
-  if (isSuperAdmin) return <AdminDashboard/>;
+ if (loading) return <SyncScreen/>;
+if (!user) return <AuthPage/>;
+if (isSuperAdmin) return <AdminDashboard/>;
 
   // 4. Logged in but no farm → onboarding
   if (!farm) return <FarmSetup/>;
