@@ -1,10 +1,16 @@
+// src/context/AuthContext.jsx
+// ─────────────────────────────────────────────────────────────
+// KEY FIX: createFarm now calls a single atomic Supabase RPC
+// instead of 4 separate chained inserts that could race/fail.
+// Everything else (auth, profile, license loading) unchanged.
+// ─────────────────────────────────────────────────────────────
+
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import supabase from '../services/supabase.js';
 import { initialPull, startBackgroundSync, stopBackgroundSync } from '../services/sync.js';
 
 const AuthContext = createContext(null);
 
-// ── HELPER: timeout wrapper ────────────────────────────────────
 const withTimeout = (promise, ms = 8000, msg = 'Request timed out. Check your internet and try again.') =>
   Promise.race([
     promise,
@@ -46,7 +52,6 @@ export function AuthProvider({ children }) {
       ).catch(() => ({ data: null }));
       setLicense(lic);
 
-      // Fire-and-forget sync — never blocks UI
       setTimeout(() => {
         initialPull(fu.farm_id).catch(() => {}).finally(() => {
           startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));
@@ -59,20 +64,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
-
-    // ── HARD 4-SECOND KILL SWITCH ─────────────────────────────
     const killSwitch = setTimeout(() => {
-      if (mounted) {
-        console.warn('[Auth] Kill switch — forcing app to load');
-        setLoading(false);
-      }
+      if (mounted) { console.warn('[Auth] Kill switch'); setLoading(false); }
     }, 4000);
 
     const init = async () => {
       try {
-        const { data: { session }, error } = await withTimeout(
-          supabase.auth.getSession(), 5000
-        );
+        const { data: { session }, error } = await withTimeout(supabase.auth.getSession(), 5000);
         if (error) throw error;
         if (session?.user && mounted) {
           setUser(session.user);
@@ -143,56 +141,30 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   };
 
-  // ── CREATE FARM ───────────────────────────────────────────────
+  // ── CREATE FARM — ATOMIC RPC (the fix!) ───────────────────────
+  // One database function does farm + farm_users + license + event log
+  // atomically. No partial state, no race conditions, no spinning.
   const createFarm = async ({ name, county, currency = 'KES', activeSpecies }) => {
     if (!user) throw new Error('Not authenticated');
 
-    // Step 1 — Create farm
-    const { data: newFarm, error: farmErr } = await withTimeout(
-      supabase.from('farms')
-        .insert({ name, county, currency, active_species: activeSpecies })
-        .select().single(),
-      10000, 'Farm creation timed out. Please check your internet and try again.'
+    const { data, error } = await withTimeout(
+      supabase.rpc('create_farm_with_license', {
+        p_farm_name: name,
+        p_country:   'Kenya',
+        p_county:    county   || null,
+        p_currency:  currency,
+        p_species:   activeSpecies || ['cattle','pigs','goats','sheep','poultry'],
+      }),
+      12000,
+      'Farm creation timed out. Please check your internet and try again.'
     );
-    if (farmErr) throw farmErr;
 
-    // Step 2 — Add user as owner
-    const { error: fuErr } = await withTimeout(
-      supabase.from('farm_users')
-        .insert({ farm_id: newFarm.id, user_id: user.id, role: 'owner' }),
-      8000
-    );
-    if (fuErr) throw fuErr;
+    if (error) throw error;
 
-    // Step 3 — Create trial license
-    const trialEnd = new Date();
-    trialEnd.setDate(trialEnd.getDate() + 14);
-    const { data: newLicense, error: licErr } = await withTimeout(
-      supabase.from('licenses').insert({
-        farm_id: newFarm.id,
-        tier: 'trial',
-        status: 'active',
-        animal_limit: 50,
-        user_limit: 2,
-        trial_ends_at: trialEnd.toISOString(),
-        current_period_end: trialEnd.toISOString(),
-        activated_by: user.id,
-      }).select().single(),
-      8000
-    );
-    if (licErr) throw licErr;
+    // Reload farm data — single query, no race conditions
+    await loadFarmData(user.id);
 
-    // Step 4 — Log license event (non-critical, don't throw)
-    supabase.from('license_events').insert({
-      farm_id: newFarm.id,
-      event_type: 'trial_start',
-      new_tier: 'trial',
-      created_by: user.id,
-    }).then(() => {}).catch(() => {});
-
-    setFarm(newFarm);
-    setLicense(newLicense);
-    return newFarm;
+    return { id: data.farm_id };
   };
 
   // ── REFRESH LICENSE ───────────────────────────────────────────

@@ -1,16 +1,29 @@
+// src/App.jsx
+// ─────────────────────────────────────────────────────────────
+// Main app shell — fixed & seamless.
+// Flow:
+//   loading         → BootLoader spinner
+//   no user         → AuthPage  (login / register)
+//   user, no farm   → FarmSetup (create farm wizard)
+//   farm, expired   → ExpiredScreen
+//   all good        → Sidebar + TopBar + feature pages
+// ─────────────────────────────────────────────────────────────
+
 import { useState } from 'react';
-import { AppProvider } from './context/AppContext.jsx';
-import { AuthProvider, useAuth } from './context/AuthContext.jsx';
-import Sidebar   from './components/Sidebar.jsx';
-import TopBar    from './components/TopBar.jsx';
+import { useAuth }  from './context/AuthContext.jsx';
+import { useApp }   from './context/AppContext.jsx';
 
-// Auth & License
-import AuthPage, { FarmSetup }   from './features/auth/AuthPages.jsx';
-import { TrialBanner, LicenseGate, ExpiredScreen, PricingModal } from './features/license/LicenseGate.jsx';
-import AdminDashboard            from './features/admin/AdminDashboard.jsx';
-import { validateLicense }       from './services/license.js';
+// Auth & onboarding
+import AuthPage, { FarmSetup } from './features/auth/AuthPages.jsx';
 
-// Feature modules
+// License
+import { ExpiredScreen, TrialBanner } from './features/license/LicenseGate.jsx';
+
+// Shell components
+import Sidebar from './components/Sidebar.jsx';
+import TopBar  from './components/TopBar.jsx';
+
+// Feature pages
 import Dashboard    from './features/dashboard/Dashboard.jsx';
 import Animals      from './features/animals/Animals.jsx';
 import Production   from './features/production/Production.jsx';
@@ -20,114 +33,95 @@ import Feed         from './features/feed/Feed.jsx';
 import Finance      from './features/finance/Finance.jsx';
 import Employees    from './features/employees/Employees.jsx';
 import Procurement  from './features/procurement/Procurement.jsx';
-import Calendar     from './features/calendar/Calendar.jsx';
+import Assets       from './features/assets/Assets.jsx';
 import Crops        from './features/crops/Crops.jsx';
-import { Assets }   from './features/assets/Assets.jsx';
-import { Lab, Reports, Notifications, Settings } from './features/misc/Misc.jsx';
+import Calendar     from './features/calendar/Calendar.jsx';
+import Misc         from './features/misc/Misc.jsx';
+import TeamManagement from './features/team/TeamManagement.jsx';
+import AdminDashboard from './features/admin/AdminDashboard.jsx';
 
-// Feature → license gate mapping
-const FEATURE_MAP = {
-  reproduction: 'reproduction',
-  procurement:  'procurement',
-  assets:       'assets',
-  crops:        'crops',
-  lab:          'lab',
-  reports:      'reports',
-};
+// ── Boot loader ───────────────────────────────────────────────
+function BootLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8]">
+      <div className="flex flex-col items-center gap-4">
+        <div className="text-5xl">🌾</div>
+        <div className="w-8 h-8 border-4 border-[#2D5016] border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-500 font-medium">Loading FarmCore…</p>
+      </div>
+    </div>
+  );
+}
 
-function AppShell() {
+// ── Feature page router ───────────────────────────────────────
+function FeaturePage({ page }) {
+  switch (page) {
+    case 'dashboard':    return <Dashboard />;
+    case 'animals':      return <Animals />;
+    case 'production':   return <Production />;
+    case 'health':       return <Health />;
+    case 'reproduction': return <Reproduction />;
+    case 'feed':         return <Feed />;
+    case 'finance':      return <Finance />;
+    case 'employees':    return <Employees />;
+    case 'procurement':  return <Procurement />;
+    case 'assets':       return <Assets />;
+    case 'crops':        return <Crops />;
+    case 'calendar':     return <Calendar />;
+    case 'team':         return <TeamManagement />;
+    case 'notifications':
+    case 'settings':
+    case 'lab':
+    case 'reports':      return <Misc page={page} />;
+    default:             return <Dashboard />;
+  }
+}
+
+// ── Main App ──────────────────────────────────────────────────
+export default function App() {
+  const { user, farm, license, loading, isSuperAdmin } = useAuth();
   const [page, setPage] = useState('dashboard');
 
-  const renderPage = () => {
-    const feature = FEATURE_MAP[page];
-    const PageComponent = {
-      dashboard:    <Dashboard    onNav={setPage}/>,
-      animals:      <Animals/>,
-      production:   <Production/>,
-      health:       <Health/>,
-      reproduction: <Reproduction/>,
-      feed:         <Feed/>,
-      finance:      <Finance/>,
-      employees:    <Employees/>,
-      procurement:  <Procurement/>,
-      assets:       <Assets/>,
-      crops:        <Crops/>,
-      calendar:     <Calendar/>,
-      lab:          <Lab/>,
-      reports:      <Reports/>,
-      notifications:<Notifications/>,
-      settings:     <Settings/>,
-    }[page] || <Dashboard onNav={setPage}/>;
+  // 1. Loading
+  if (loading) return <BootLoader />;
 
-    if (feature) {
-      return (
-        <LicenseGate feature={feature}>
-          {PageComponent}
-        </LicenseGate>
-      );
-    }
-    return PageComponent;
-  };
+  // 2. Not logged in
+  if (!user) return <AuthPage />;
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#F5F0E8]">
-      <Sidebar active={page} onNav={setPage}/>
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TrialBanner/>
-        <TopBar onNav={setPage}/>
-        {renderPage()}
-      </div>
-    </div>
-  );
-}
+  // 3. Logged in but no farm yet → onboarding
+  if (!farm) return <FarmSetup />;
 
-// ── SYNC LOADING SCREEN ────────────────────────────────────────
-function SyncScreen() {
-  return (
-    <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-6xl mb-4 animate-pulse">🌾</div>
-        <p style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016] mb-2">FarmCore FMIS</p>
-        <p className="text-sm text-gray-400 mb-4">Syncing your farm data…</p>
-        <div className="w-48 h-1.5 bg-[#e8e0d0] rounded-full mx-auto overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-[#2D5016] to-[#4e8628] rounded-full animate-[loading_1.5s_ease-in-out_infinite]"
-            style={{width:'60%',animation:'pulse 1s ease-in-out infinite'}}/>
+  // 4. Farm exists but license expired
+  if (license && license.status !== 'active') {
+    return <ExpiredScreen onUpgrade={() => setPage('settings')} />;
+  }
+
+  // 5. Admin dashboard (accessible via nav)
+  if (page === 'admin' && isSuperAdmin) {
+    return (
+      <div className="flex h-screen overflow-hidden bg-[#faf9f6]">
+        <Sidebar active={page} onNav={setPage} />
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <TopBar page={page} onNav={setPage} />
+          <main className="flex-1 overflow-auto">
+            <AdminDashboard />
+          </main>
         </div>
       </div>
+    );
+  }
+
+  // 6. Main app shell
+  return (
+    <div className="flex h-screen overflow-hidden bg-[#faf9f6]">
+      <Sidebar active={page} onNav={setPage} />
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <TrialBanner />
+        <TopBar page={page} onNav={setPage} />
+        <main className="flex-1 overflow-auto">
+          <FeaturePage page={page} />
+        </main>
+      </div>
     </div>
-  );
-}
-
-// ── MAIN AUTH ROUTER ──────────────────────────────────────────
-function AuthRouter() {
-  const { user, farm, license, loading, syncStatus, isSuperAdmin } = useAuth();
-
-  // 1. Loading / initial sync
- if (loading) return <SyncScreen/>;
-if (!user) return <AuthPage/>;
-if (isSuperAdmin) return <AdminDashboard/>;
-
-  // 4. Logged in but no farm → onboarding
-  if (!farm) return <FarmSetup/>;
-
-  // 5. License expired
-  const validation = validateLicense(license);
-  if (!validation.valid) return (
-    <ExpiredScreen onUpgrade={()=>{ /* open pricing */ }}/>
-  );
-
-  // 6. Full app
-  return (
-    <AppProvider farmId={farm?.id}>
-      <AppShell/>
-    </AppProvider>
-  );
-}
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <AuthRouter/>
-    </AuthProvider>
   );
 }

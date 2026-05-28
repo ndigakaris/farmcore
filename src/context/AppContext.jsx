@@ -1,73 +1,77 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import db from '../db/schema.js';
+// src/context/AppContext.jsx
+// ─────────────────────────────────────────────────────────────
+// Provides UI state: sidebar open/close, online status,
+// sync status, unread notifications count, farm display name.
+// ─────────────────────────────────────────────────────────────
+
+import { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext.jsx';
+import supabase    from '../services/supabase.js';
 
 const AppContext = createContext(null);
 
-export function AppProvider({ children, farmId }) {
-  const [species, setSpecies]     = useState('all');
-  const [currency, setCurrency]   = useState('KES');
-  const [language, setLanguage]   = useState('en');
-  const [theme, setTheme]         = useState('light');
-  const [farmName, setFarmName]   = useState('My Farm');
-  const [currentUser, setCurrentUser] = useState({ name: 'User', role: 'worker' });
-  const [syncStatus, setSyncStatus] = useState('synced');
-  const [isOnline, setIsOnline]   = useState(navigator.onLine);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [activeSpecies, setActiveSpecies] = useState(['cattle','pigs','goats','sheep','poultry']);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+export function AppProvider({ children }) {
+  const { farm, user } = useAuth();
 
+  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [isOnline,     setIsOnline]     = useState(navigator.onLine);
+  const [syncStatus,   setSyncStatus]   = useState('synced');
+  const [unreadCount,  setUnreadCount]  = useState(0);
+
+  // ── Online/offline detection ──────────────────────────────
   useEffect(() => {
-    const onOnline  = () => { setIsOnline(true);  setSyncStatus('synced'); };
-    const onOffline = () => { setIsOnline(false); setSyncStatus('offline'); };
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+    const online  = () => setIsOnline(true);
+    const offline = () => setIsOnline(false);
+    window.addEventListener('online',  online);
+    window.addEventListener('offline', offline);
+    return () => {
+      window.removeEventListener('online',  online);
+      window.removeEventListener('offline', offline);
+    };
   }, []);
 
+  // ── Unread notification count ─────────────────────────────
   useEffect(() => {
-    db.settings.toArray().then(rows => {
-      rows.forEach(r => {
-        if (r.key === 'farmName')      setFarmName(r.value);
-        if (r.key === 'currency')      setCurrency(r.value);
-        if (r.key === 'language')      setLanguage(r.value);
-        if (r.key === 'theme')         setTheme(r.value);
-        if (r.key === 'currentUser')   { try { setCurrentUser(JSON.parse(r.value)); } catch(e){} }
-        if (r.key === 'activeSpecies') { try { setActiveSpecies(JSON.parse(r.value)); } catch(e){} }
-      });
-    }).catch(()=>{});
-    db.notifications?.where('read').equals(0).count().then(setUnreadCount).catch(()=>{});
-  }, [farmId]);
+    if (!farm?.id) { setUnreadCount(0); return; }
 
-  const saveSetting = useCallback(async (key, value) => {
-    try {
-      await db.settings.where('key').equals(key).modify({ value: typeof value === 'object' ? JSON.stringify(value) : value });
-    } catch(e) {}
-  }, []);
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('farm_id', farm.id)
+        .eq('read', false);
+      setUnreadCount(count || 0);
+    };
 
-  const formatCurrency = useCallback((amount) => {
-    const n = Number(amount) || 0;
-    if (currency === 'KES') return `KES ${n.toLocaleString()}`;
-    if (currency === 'USD') return `$${(n / 130).toFixed(2)}`;
-    return `${currency} ${n.toLocaleString()}`;
-  }, [currency]);
+    fetchCount();
 
-  const value = {
-    species, setSpecies,
-    currency, setCurrency,
-    language, setLanguage,
-    theme, setTheme,
-    farmName, setFarmName,
-    currentUser, setCurrentUser,
-    syncStatus, setSyncStatus,
-    isOnline,
-    unreadCount, setUnreadCount,
-    activeSpecies, setActiveSpecies,
-    sidebarOpen, setSidebarOpen,
-    saveSetting, formatCurrency,
-    farmId,
-  };
+    // Subscribe to new notifications
+    const channel = supabase
+      .channel(`notifications:${farm.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `farm_id=eq.${farm.id}`,
+      }, () => fetchCount())
+      .subscribe();
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+    return () => { supabase.removeChannel(channel); };
+  }, [farm?.id]);
+
+  const farmName = farm?.name || 'FarmCore';
+
+  return (
+    <AppContext.Provider value={{
+      farmName,
+      sidebarOpen, setSidebarOpen,
+      isOnline,
+      syncStatus,  setSyncStatus,
+      unreadCount, setUnreadCount,
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
 }
 
 export const useApp = () => {
