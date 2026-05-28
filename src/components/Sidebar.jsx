@@ -6,33 +6,33 @@ import {
   LayoutDashboard, Beef, Droplets, Stethoscope, Heart, Wheat,
   DollarSign, Users, Calendar, BarChart3, Settings, Package,
   Tractor, FlaskConical, Bell, ChevronLeft, ChevronRight,
-  Wifi, WifiOff, UserCog
+  Wifi, WifiOff, UserCog, Calculator
 } from 'lucide-react';
 
 const NAV = [
   { section: 'Main', items: [
-    { id:'dashboard',    label:'Dashboard',       icon:LayoutDashboard },
-    { id:'animals',      label:'Animal Registry', icon:Beef },
-    { id:'production',   label:'Production',      icon:Droplets },
-    { id:'health',       label:'Health & Vets',   icon:Stethoscope },
-    { id:'reproduction', label:'Reproduction',    icon:Heart },
-    { id:'feed',         label:'Feed & Inventory',icon:Wheat },
+    { id:'dashboard',    label:'Dashboard',          icon:LayoutDashboard },
+    { id:'animals',      label:'Animal Registry',    icon:Beef },
+    { id:'production',   label:'Production',         icon:Droplets },
+    { id:'health',       label:'Health & Vets',      icon:Stethoscope },
+    { id:'reproduction', label:'Reproduction',       icon:Heart },
+    { id:'feed',         label:'Feed & Inventory',   icon:Wheat },
   ]},
   { section: 'Manage', items: [
-    { id:'finance',      label:'Financials',      icon:DollarSign },
-    { id:'employees',    label:'Employees',       icon:Users },
-   { id:'cost', label:'Cost Calculator', icon:'📊' }
-    { id:'procurement',  label:'Procurement',     icon:Package },
-    { id:'assets',       label:'Assets',          icon:Tractor },
-    { id:'crops',        label:'Crops & Pasture', icon:Wheat },     
-    { id:'calendar',     label:'Farm Calendar',   icon:Calendar },
-    { id:'lab',          label:'Laboratory',      icon:FlaskConical },
-    { id:'reports',      label:'Reports',         icon:BarChart3 },
+    { id:'finance',      label:'Financials',         icon:DollarSign },
+    { id:'cost',         label:'Cost Calculator',    icon:Calculator },
+    { id:'employees',    label:'Employees',          icon:Users },
+    { id:'procurement',  label:'Procurement',        icon:Package },
+    { id:'assets',       label:'Assets',             icon:Tractor },
+    { id:'crops',        label:'Crops & Pasture',    icon:Wheat },
+    { id:'calendar',     label:'Farm Calendar',      icon:Calendar },
+    { id:'lab',          label:'Laboratory',         icon:FlaskConical },
+    { id:'reports',      label:'Reports',            icon:BarChart3 },
   ]},
   { section: 'Account', items: [
-    { id:'team',         label:'Team & Roles',    icon:UserCog },
-    { id:'notifications',label:'Notifications',   icon:Bell, badge:true },
-    { id:'settings',     label:'Settings',        icon:Settings },
+    { id:'team',          label:'Team & Roles',      icon:UserCog },
+    { id:'notifications', label:'Notifications',     icon:Bell, badge:true },
+    { id:'settings',      label:'Settings',          icon:Settings },
   ]},
 ];
 
