@@ -7,7 +7,7 @@ export default function TopBar({ onNav }) {
   const { species, setSpecies, currency, setCurrency, theme, setTheme,
           currentUser, unreadCount, activeSpecies } = useApp();
 
-  const visibleSpecies = ['all', ...activeSpecies];
+ const visibleSpecies = ['all', ...(activeSpecies || [])];
 
   return (
     <div className="bg-white border-b border-[#e8e0d0] px-5 h-12 flex items-center gap-3 flex-shrink-0">
