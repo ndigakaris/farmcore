@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
 import { SPECIES } from '../../constants/index.js';
-import { Modal, KPICard, StatGrid, PageHeader, DataTable, SectionCard } from '../../components/UI.jsx';
+import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr, offsetDate } from '../../utils/index.js';
 import { Plus, Heart } from 'lucide-react';
 
@@ -15,7 +15,6 @@ function HeatForm({ onClose }) {
   const handleSave = async () => {
     if (!form.animalId) return;
     await db.heatLogs.add({ ...form, animalId:Number(form.animalId), syncStatus:'pending', updatedAt:new Date() });
-    // Schedule breeding reminder in 12-18h
     await db.notifications.add({ type:'breeding', priority:'warning', title:'Heat Alert', body:`${animals?.find(a=>a.id===Number(form.animalId))?.name} is in heat. Optimal breeding window: 12–18 hours.`, read:false, timestamp:new Date() });
     onClose();
   };
@@ -57,15 +56,52 @@ function HeatForm({ onClose }) {
 
 function BreedingForm({ onClose }) {
   const [form, setForm] = useState({ animalId:'', date:todayStr(), method:'AI', sireId:'', strawBatch:'', technician:'', cost:'', notes:'' });
+  const [saving, setSaving] = useState(false);
   const animals = useLiveQuery(() => db.animals.where('sex').equals('F').toArray(), []);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
   const handleSave = async () => {
-    if (!form.animalId) return;
-    await db.breedingLogs.add({ ...form, animalId:Number(form.animalId), cost:parseFloat(form.cost)||0, syncStatus:'pending', updatedAt:new Date() });
-    // Schedule pregnancy check in 21 days
-    await db.calendarEvents.add({ date:offsetDate(21), type:'reproduction', title:`PD Check – ${animals?.find(a=>a.id===Number(form.animalId))?.name}`, species:'cattle', relatedId:Number(form.animalId), priority:'warning', syncStatus:'pending' });
-    onClose();
+    if (!form.animalId) { alert('Please select an animal'); return; }
+    setSaving(true);
+    try {
+      const cost = parseFloat(form.cost)||0;
+      const animalId = Number(form.animalId);
+      const animal = animals?.find(a=>a.id===animalId);
+
+      await db.breedingLogs.add({
+        ...form, animalId, cost,
+        syncStatus:'pending', updatedAt:new Date()
+      });
+
+      // Schedule pregnancy check in 21 days
+      await db.calendarEvents.add({
+        date: offsetDate(21), type:'reproduction',
+        title: `PD Check – ${animal?.name}`,
+        species:'cattle', relatedId: animalId,
+        priority:'warning', syncStatus:'pending'
+      });
+
+      // Auto-record cost as expense in Finance
+      if (cost > 0) {
+        await db.transactions.add({
+          type:'expense', category:'Veterinary',
+          description:`Breeding (${form.method}) – ${animal?.name} ${animal?.tag}`,
+          amount: cost, date: form.date,
+          species: animal?.species || 'cattle',
+          paymentMethod:'Cash', source:'reproduction',
+          syncStatus:'pending', updatedAt:new Date()
+        });
+      }
+
+      onClose();
+    } catch (err) {
+      console.error('Breeding save error:', err);
+      alert('Save failed: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
+
   return (
     <div className="grid grid-cols-2 gap-4">
       <div className="col-span-2"><label className="form-label">Animal<span className="text-red-500">*</span></label>
@@ -85,11 +121,17 @@ function BreedingForm({ onClose }) {
       <div><label className="form-label">Sire / Bull</label><input className="form-input" value={form.sireId} onChange={e=>f('sireId',e.target.value)} placeholder="Tag, straw code, or External"/></div>
       <div><label className="form-label">Straw / Batch No.</label><input className="form-input" value={form.strawBatch} onChange={e=>f('strawBatch',e.target.value)}/></div>
       <div><label className="form-label">Technician</label><input className="form-input" value={form.technician} onChange={e=>f('technician',e.target.value)}/></div>
-      <div><label className="form-label">Cost (KES)</label><input className="form-input" type="number" value={form.cost} onChange={e=>f('cost',e.target.value)}/></div>
+      <div>
+        <label className="form-label">Cost (KES)</label>
+        <input className="form-input" type="number" value={form.cost} onChange={e=>f('cost',e.target.value)}/>
+        <p className="text-xs text-green-700 mt-1">💡 Auto-recorded as expense in Finance</p>
+      </div>
       <div className="col-span-2"><label className="form-label">Notes</label><textarea className="form-input resize-y min-h-[50px]" value={form.notes} onChange={e=>f('notes',e.target.value)}/></div>
       <div className="col-span-2 flex justify-end gap-3 pt-2 border-t border-[#e8e0d0]">
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={handleSave}>Save Breeding Record</button>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {saving ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2"/>Saving…</> : 'Save Breeding Record'}
+        </button>
       </div>
     </div>
   );
@@ -144,13 +186,11 @@ export default function Reproduction() {
   const [showHeat, setShowHeat] = useState(false);
   const [showBred, setShowBred] = useState(false);
   const [showPD,   setShowPD]   = useState(false);
-
   const animals  = useLiveQuery(() => db.animals.toArray(), []);
   const heatLogs = useLiveQuery(() => db.heatLogs.orderBy('date').reverse().toArray(), []);
   const breeding = useLiveQuery(() => db.breedingLogs.orderBy('date').reverse().toArray(), []);
   const pdChecks = useLiveQuery(() => db.pregnancyChecks.orderBy('date').reverse().toArray(), []);
   const births   = useLiveQuery(() => db.births.orderBy('date').reverse().toArray(), []);
-
   const pregnant  = pdChecks?.filter(p=>p.result==='Confirmed').length || 0;
   const heatCount = heatLogs?.filter(h=>{ const d=Math.floor((new Date()-new Date(h.date))/86400000); return d<=7; }).length || 0;
 
@@ -180,24 +220,21 @@ export default function Reproduction() {
 
   return (
     <div className="page-content">
-      <PageHeader
-        title="Reproduction Management"
+      <PageHeader title="Reproduction Management"
         actions={
           <div className="flex gap-2">
             <button className="btn btn-secondary" onClick={()=>setShowHeat(true)}>🌡️ Heat</button>
             <button className="btn btn-secondary" onClick={()=>setShowPD(true)}>🔬 PD Check</button>
-            <button className="btn btn-primary" onClick={()=>setShowBred(true)}><Heart size={15}/>Record Breeding</button>
+            <button className="btn btn-primary"   onClick={()=>setShowBred(true)}><Heart size={15}/>Record Breeding</button>
           </div>
         }
       />
-
       <StatGrid cols={4}>
-        <KPICard label="Confirmed Pregnant" value={pregnant} icon="🤰" color="#2D5016"/>
+        <KPICard label="Confirmed Pregnant" value={pregnant}   icon="🤰" color="#2D5016"/>
         <KPICard label="In Heat (7d)"        value={heatCount} icon="🌡️" color={heatCount>0?'#d97706':undefined}/>
         <KPICard label="Breedings (30d)"     value={(breeding||[]).filter(b=>Math.floor((new Date()-new Date(b.date))/86400000)<=30).length} icon="💚"/>
         <KPICard label="Births (90d)"        value={(births||[]).filter(b=>Math.floor((new Date()-new Date(b.date))/86400000)<=90).length} icon="🐄"/>
       </StatGrid>
-
       <div className="flex gap-2 mb-4">
         {[['heat','Heat Logs'],['breeding','Breeding'],['pd','Pregnancy Checks'],['births','Births']].map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)}
@@ -206,7 +243,6 @@ export default function Reproduction() {
           </button>
         ))}
       </div>
-
       <div className="card">
         {tab==='heat'    && <DataTable columns={heatCols} rows={heatLogs||[]} emptyText="No heat records yet."/>}
         {tab==='breeding'&& <DataTable columns={bredCols} rows={breeding||[]} emptyText="No breeding records yet."/>}
@@ -216,9 +252,8 @@ export default function Reproduction() {
           { key:'date',   label:'Date',    render:v=>formatDate(v) },
           { key:'calves', label:'Offspring', render:v=>`${(v||[]).length} born` },
           { key:'notes',  label:'Notes' },
-        ]} rows={births||[]} emptyText="No birth records yet."/>}
+        ]} rows={births||[]} emptyText="No birth records."/>}
       </div>
-
       {showHeat && <Modal open title="Record Heat Observation" onClose={()=>setShowHeat(false)}><HeatForm onClose={()=>setShowHeat(false)}/></Modal>}
       {showBred && <Modal open title="Record Breeding / AI Service" onClose={()=>setShowBred(false)} size="lg"><BreedingForm onClose={()=>setShowBred(false)}/></Modal>}
       {showPD   && <Modal open title="Pregnancy Diagnosis (PD Check)" onClose={()=>setShowPD(false)}><PDCheckForm onClose={()=>setShowPD(false)}/></Modal>}
