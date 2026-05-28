@@ -27,6 +27,7 @@ import Crops         from './features/crops/Crops.jsx';
 import Calendar      from './features/calendar/Calendar.jsx';
 import TeamManagement  from './features/team/TeamManagement.jsx';
 import AdminDashboard  from './features/admin/AdminDashboard.jsx';
+import CostCalculator from './features/cost/CostCalculator.jsx';
 
 // Named exports
 import { Assets } from './features/assets/Assets.jsx';
@@ -64,6 +65,7 @@ function FeaturePage({ page, onNav }) {
     case 'lab':           return <Lab />;
     case 'reports':       return <Reports />;
     case 'notifications': return <Notifications />;
+    case 'cost':          return <CostCalculator />;
     case 'settings':      return <Settings />;
     default:              return <Dashboard onNav={onNav} />;
   }

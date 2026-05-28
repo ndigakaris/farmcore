@@ -21,9 +21,10 @@ const NAV = [
   { section: 'Manage', items: [
     { id:'finance',      label:'Financials',      icon:DollarSign },
     { id:'employees',    label:'Employees',       icon:Users },
+   { id:'cost', label:'Cost Calculator', icon:'📊' }
     { id:'procurement',  label:'Procurement',     icon:Package },
     { id:'assets',       label:'Assets',          icon:Tractor },
-    { id:'crops',        label:'Crops & Pasture', icon:Wheat },
+    { id:'crops',        label:'Crops & Pasture', icon:Wheat },     
     { id:'calendar',     label:'Farm Calendar',   icon:Calendar },
     { id:'lab',          label:'Laboratory',      icon:FlaskConical },
     { id:'reports',      label:'Reports',         icon:BarChart3 },
