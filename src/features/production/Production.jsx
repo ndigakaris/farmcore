@@ -12,25 +12,24 @@ const SHIFTS = ['Morning', 'Afternoon', 'Evening'];
 
 function MilkLogForm({ onClose }) {
   const [form, setForm] = useState({
-    animalId:'', shift:'Morning', amount:'', totalLiters:'', pricePerLiter:'',
+    animalId:'', shift:'Morning', amount:'', pricePerLiter:'',
     unit:'liters', status:'Sold', fat:'', protein:'', scc:'', date: todayStr()
   });
   const animals = useLiveQuery(() => db.animals.where('species').equals('cattle').and(a=>a.sex==='F').toArray(), []);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const selectedAnimal = animals?.find(a=>a.id===Number(form.animalId));
   const isLocked = selectedAnimal?.milkLock && form.status === 'Sold';
-  const revenue = parseFloat(form.totalLiters||form.amount||0) * parseFloat(form.pricePerLiter||0);
+  const revenue = parseFloat(form.amount||0) * parseFloat(form.pricePerLiter||0);
 
   const handleSave = async () => {
     if (!form.animalId || !form.amount) return;
     if (isLocked) { alert('🔒 WITHDRAWAL LOCK: Cannot log this milk as Sold. Change status to "Used on Farm" or wait until lock expires.'); return; }
-    const liters = parseFloat(form.totalLiters||form.amount)||0;
+    const liters = parseFloat(form.amount)||0;
     const price  = parseFloat(form.pricePerLiter)||0;
     await db.milkLogs.add({
       ...form,
       animalId: Number(form.animalId),
-      amount: parseFloat(form.amount),
-      totalLiters: liters,
+      amount: liters,
       pricePerLiter: price,
       revenue: liters * price,
       fat: parseFloat(form.fat)||null,
@@ -38,7 +37,6 @@ function MilkLogForm({ onClose }) {
       scc: parseInt(form.scc)||null,
       syncStatus:'pending', updatedAt:new Date()
     });
-    // Auto-record milk revenue in Finance when sold
     if (form.status === 'Sold' && liters > 0 && price > 0) {
       await db.transactions.add({
         type:'income', category:'Milk Sales',
@@ -58,7 +56,7 @@ function MilkLogForm({ onClose }) {
           <Lock size={18} className="text-red-600 flex-shrink-0"/>
           <div>
             <p className="text-sm font-semibold text-red-700">🔒 WITHDRAWAL LOCK ACTIVE</p>
-            <p className="text-xs text-red-500">Milk from <strong>{selectedAnimal?.name}</strong> cannot be sold until {selectedAnimal?.lockExpiry}.</p>
+            <p className="text-xs text-red-500">Milk from <strong>{selectedAnimal?.name}</strong> cannot be sold until {selectedAnimal?.lockExpiry}. Change status to "Used on Farm".</p>
           </div>
         </div>
       )}
@@ -80,22 +78,17 @@ function MilkLogForm({ onClose }) {
             {SHIFTS.map(s=><option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-        {/* Total liters + amount fields */}
         <div>
           <label className="form-label">Total Liters<span className="text-red-500">*</span></label>
-          <input className="form-input" type="number" step="0.1" value={form.amount}
-            onChange={e=>{f('amount',e.target.value); f('totalLiters',e.target.value);}}
-            placeholder="e.g. 8.5"/>
+          <input className="form-input" type="number" step="0.1" value={form.amount} onChange={e=>f('amount',e.target.value)} placeholder="e.g. 8.5"/>
         </div>
         <div>
           <label className="form-label">Price per Liter (KES)</label>
-          <input className="form-input" type="number" step="0.5" value={form.pricePerLiter}
-            onChange={e=>f('pricePerLiter',e.target.value)} placeholder="e.g. 55"/>
+          <input className="form-input" type="number" step="0.5" value={form.pricePerLiter} onChange={e=>f('pricePerLiter',e.target.value)} placeholder="e.g. 55"/>
         </div>
-        {/* Revenue preview */}
         {revenue > 0 && (
           <div className="col-span-2 bg-green-50 border border-green-200 rounded-lg px-4 py-2 flex items-center justify-between">
-            <span className="text-sm text-green-700">Revenue Preview</span>
+            <span className="text-sm text-green-700">💰 Revenue Preview</span>
             <span className="font-bold text-green-800">KES {revenue.toLocaleString()}</span>
           </div>
         )}
@@ -126,6 +119,7 @@ function MilkLogForm({ onClose }) {
   );
 }
 
+function EggLogForm({ onClose }) {
   const [form, setForm] = useState({ flockId:'', date:todayStr(), total:'', cracked:'', gradeA:'', gradeB:'', feedIntake:'', feedUnit:'kg' });
   const flocks = useLiveQuery(() => db.animals.where('species').equals('poultry').toArray(), []);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
