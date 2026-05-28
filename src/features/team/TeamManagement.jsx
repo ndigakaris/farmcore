@@ -2,139 +2,188 @@ import { useState, useEffect, useMemo } from 'react';
 import supabase from '../../services/supabase.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { canAddUser } from '../../services/license.js';
-import { Modal, PageHeader, DataTable, KPICard, StatGrid, SectionCard, Badge } from '../../components/UI.jsx';
+import { Modal, PageHeader, DataTable, KPICard, StatGrid } from '../../components/UI.jsx';
 import { formatDate, getInitials, cn } from '../../utils/index.js';
-import { Plus, Mail, Shield, Trash2, Crown, Eye, Edit, Wrench, Stethoscope, UserX, Send, Copy, Check } from 'lucide-react';
+import { Plus, Shield, Trash2, Crown, Eye, Edit, Wrench, Stethoscope, UserX, Check, Search } from 'lucide-react';
 
 // ── ROLE DEFINITIONS ──────────────────────────────────────────
 export const FARM_ROLES = {
-  owner: {
-    label: 'Owner',
-    icon: Crown,
-    color: 'badge-purple',
-    description: 'Full access to everything. Can manage billing and team.',
-    permissions: ['all'],
-  },
-  admin: {
-    label: 'Admin',
-    icon: Shield,
-    color: 'badge-blue',
-    description: 'Full access except billing. Can manage team members.',
-    permissions: ['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','notifications','settings','team'],
-  },
-  manager: {
-    label: 'Farm Manager',
-    icon: Edit,
-    color: 'badge-green',
-    description: 'Can view and edit all farm data. Cannot manage team or billing.',
-    permissions: ['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','notifications'],
-  },
-  worker: {
-    label: 'Farm Worker',
-    icon: Wrench,
-    color: 'badge-amber',
-    description: 'Can log daily activities — milk, feed, attendance. Read-only on financials.',
-    permissions: ['animals','production','health','feed','employees','calendar','notifications'],
-  },
-  vet: {
-    label: 'Vet / Consultant',
-    icon: Stethoscope,
-    color: 'badge-red',
-    description: 'Can view animal records and log health treatments only.',
-    permissions: ['animals','health','reproduction','lab','notifications'],
-  },
-  viewer: {
-    label: 'Viewer',
-    icon: Eye,
-    color: 'badge-gray',
-    description: 'Read-only access to all farm data. Cannot edit anything.',
-    permissions: [],
-  },
+  owner:   { label:'Owner',       icon:Crown,       color:'badge-purple', description:'Full access including billing and team management.', permissions:['all'] },
+  admin:   { label:'Admin',       icon:Shield,      color:'badge-blue',   description:'Full access except billing. Can manage team.', permissions:['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','notifications','settings','team'] },
+  manager: { label:'Farm Manager',icon:Edit,        color:'badge-green',  description:'View and edit all farm data. Cannot manage team or billing.', permissions:['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','notifications'] },
+  worker:  { label:'Farm Worker', icon:Wrench,      color:'badge-amber',  description:'Log daily activities. Read-only on financials.', permissions:['animals','production','health','feed','employees','calendar','notifications'] },
+  vet:     { label:'Vet/Consultant',icon:Stethoscope,color:'badge-red',   description:'View animals and log health treatments only.', permissions:['animals','health','reproduction','lab','notifications'] },
+  viewer:  { label:'Viewer',      icon:Eye,         color:'badge-gray',   description:'Read-only access to all data.', permissions:[] },
 };
 
-// ── INVITE FORM ───────────────────────────────────────────────
-function InviteForm({ farmId, onClose, onInvited }) {
+const ALL_MODULES = ['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','notifications','settings','team'];
+
+function RoleBadge({ role }) {
+  const r = FARM_ROLES[role] || FARM_ROLES.viewer;
+  const Icon = r.icon;
+  return <span className={cn('badge gap-1', r.color)}><Icon size={10}/>{r.label}</span>;
+}
+
+// ── ADD MEMBER DIRECTLY (no invite needed) ────────────────────
+function AddMemberForm({ farmId, onClose, onAdded }) {
   const { user, farm, license } = useAuth();
-  const [form, setForm] = useState({ email: '', role: 'worker', message: '' });
+  const [step,    setStep]    = useState('form'); // form | confirm | done
+  const [form,    setForm]    = useState({ identifier:'', password:'', fullName:'', role:'worker' });
+  const [customPerms, setCustomPerms] = useState(null); // null = use role defaults
   const [loading, setLoading] = useState(false);
-  const [done, setDone]       = useState(false);
-  const [error, setError]     = useState('');
+  const [error,   setError]   = useState('');
   const [memberCount, setMemberCount] = useState(0);
+  const [preview, setPreview] = useState(null); // existing user found
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  useEffect(() => {
-    supabase.from('farm_users').select('id', { count:'exact' }).eq('farm_id', farmId)
-      .then(({ count }) => setMemberCount(count || 0));
-  }, [farmId]);
+  useEffect(()=>{
+    supabase.from('farm_users').select('id',{count:'exact'}).eq('farm_id',farmId)
+      .then(({count})=>setMemberCount(count||0));
+  },[farmId]);
 
   const canInvite = canAddUser(license, memberCount);
+  const rolePerms = FARM_ROLES[form.role]?.permissions || [];
+  const effectivePerms = customPerms ?? (rolePerms.includes('all') ? ALL_MODULES : rolePerms);
 
-  const handleInvite = async () => {
-    if (!form.email) { setError('Email is required.'); return; }
-    if (!canInvite)  { setError('User limit reached. Upgrade your plan to add more team members.'); return; }
+  const togglePerm = (mod) => {
+    const base = customPerms ?? (rolePerms.includes('all') ? ALL_MODULES : rolePerms);
+    if (base.includes(mod)) setCustomPerms(base.filter(p=>p!==mod));
+    else setCustomPerms([...base, mod]);
+  };
+
+  // Check if user already exists in Supabase auth
+  const lookupUser = async () => {
     setError(''); setLoading(true);
     try {
-      // Store invite in pending_invites table
-      const { error: invErr } = await supabase.from('pending_invites').insert({
+      const identifier = form.identifier.trim();
+      // Try to find by email in profiles
+      const { data } = await supabase.from('profiles')
+        .select('id, full_name')
+        .or(`email.eq.${identifier},phone.eq.${identifier}`)
+        .maybeSingle();
+      if (data) setPreview(data);
+      else setPreview(null);
+    } catch {}
+    finally { setLoading(false); }
+  };
+
+  const handleAdd = async () => {
+    if (!form.identifier.trim()) { setError('Email or phone is required.'); return; }
+    if (!canInvite) { setError('User limit reached. Upgrade your plan.'); return; }
+    setError(''); setLoading(true);
+    try {
+      let userId = preview?.id;
+
+      if (!userId) {
+        // Create the user account directly
+        if (!form.fullName.trim()) { setError('Full name is required for new users.'); setLoading(false); return; }
+        if (form.password.length < 8) { setError('Password must be at least 8 characters.'); setLoading(false); return; }
+
+        const isEmail = form.identifier.includes('@');
+        const { data: authData, error: signupErr } = await supabase.auth.admin
+          ? await supabase.auth.signUp({
+              email:    isEmail ? form.identifier : `${form.identifier}@farmcore.app`,
+              password: form.password,
+              options:  { data: { full_name: form.fullName } }
+            })
+          : await supabase.functions.invoke('create-user', {
+              body: { email: form.identifier, password: form.password, fullName: form.fullName }
+            });
+
+        if (signupErr) throw signupErr;
+        userId = authData?.user?.id;
+        if (!userId) throw new Error('Failed to create user account.');
+      }
+
+      // Check not already a member
+      const { data: existing } = await supabase.from('farm_users')
+        .select('id').eq('farm_id', farmId).eq('user_id', userId).maybeSingle();
+      if (existing) throw new Error('This user is already a member of your farm.');
+
+      // Add to farm_users with role and custom permissions
+      const permsToSave = customPerms ?? null; // null = inherit from role
+      await supabase.from('farm_users').insert({
         farm_id:    farmId,
-        email:      form.email.toLowerCase().trim(),
+        user_id:    userId,
         role:       form.role,
         invited_by: user.id,
-        message:    form.message,
-        token:      crypto.randomUUID(),
-        expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        custom_permissions: permsToSave,
       });
-      if (invErr) throw invErr;
 
-      setDone(true);
-      onInvited?.();
+      setStep('done');
+      onAdded?.();
     } catch (err) {
-      setError(err.message || 'Failed to send invite.');
+      setError(err.message || 'Failed to add member.');
     } finally { setLoading(false); }
   };
 
-  if (done) return (
-    <div className="text-center py-4">
-      <div className="text-5xl mb-3">📧</div>
-      <h3 style={{fontFamily:'Fraunces,serif'}} className="text-lg font-semibold text-[#2D5016] mb-2">Invite sent!</h3>
-      <p className="text-sm text-gray-500 mb-2">An invitation has been sent to <strong>{form.email}</strong></p>
-      <p className="text-xs text-gray-400 mb-4">They'll receive a link to join <strong>{farm?.name}</strong> as <strong>{FARM_ROLES[form.role]?.label}</strong>. The invite expires in 7 days.</p>
-      <button onClick={onClose} className="btn btn-primary justify-center w-full">Done</button>
+  if (step === 'done') return (
+    <div className="text-center py-6">
+      <div className="text-5xl mb-3">🎉</div>
+      <h3 className="text-lg font-semibold text-[#2D5016] mb-2">Member Added!</h3>
+      <p className="text-sm text-gray-500 mb-1">
+        <strong>{form.fullName || form.identifier}</strong> has been added to <strong>{farm?.name}</strong>
+      </p>
+      <p className="text-xs text-gray-400 mb-4">Role: <strong>{FARM_ROLES[form.role]?.label}</strong></p>
+      <button onClick={onClose} className="btn btn-primary w-full justify-center">Done</button>
     </div>
   );
 
   return (
-    <div className="space-y-4">
-      {!canInvite && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-700">
-          ⚠️ You've reached your plan's user limit. Upgrade to add more team members.
-        </div>
-      )}
+    <div className="space-y-5">
+      {!canInvite && <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-700">⚠️ User limit reached. Upgrade to add more members.</div>}
       {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>}
 
+      {/* Step 1: Identifier */}
       <div>
-        <label className="form-label">Email Address<span className="text-red-500">*</span></label>
-        <input className="form-input" type="email" value={form.email}
-          onChange={e=>f('email',e.target.value)} placeholder="colleague@example.com" autoFocus/>
+        <label className="form-label">Email or Phone Number<span className="text-red-500">*</span></label>
+        <div className="flex gap-2">
+          <input className="form-input flex-1" type="text" value={form.identifier}
+            onChange={e=>{ f('identifier',e.target.value); setPreview(null); }}
+            placeholder="e.g. james@email.com or 0712345678"/>
+          <button className="btn btn-secondary px-3" onClick={lookupUser} disabled={!form.identifier.trim()||loading}>
+            <Search size={14}/>
+          </button>
+        </div>
+        {preview && (
+          <div className="mt-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-800">
+            ✅ Found existing user: <strong>{preview.full_name}</strong> — will be added directly, no password needed.
+          </div>
+        )}
+        {!preview && form.identifier && (
+          <p className="text-xs text-gray-400 mt-1">No existing account found — fill in name and password to create one.</p>
+        )}
       </div>
 
+      {/* New user fields */}
+      {!preview && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <label className="form-label">Full Name <span className="text-gray-400 text-xs">(for new accounts)</span></label>
+            <input className="form-input" value={form.fullName} onChange={e=>f('fullName',e.target.value)} placeholder="James Mwangi"/>
+          </div>
+          <div className="col-span-2">
+            <label className="form-label">Password <span className="text-gray-400 text-xs">(min 8 characters)</span></label>
+            <input className="form-input" type="password" value={form.password} onChange={e=>f('password',e.target.value)} placeholder="Create a password for them"/>
+          </div>
+        </div>
+      )}
+
+      {/* Role selection */}
       <div>
         <label className="form-label">Role<span className="text-red-500">*</span></label>
         <div className="space-y-2 mt-1">
           {Object.entries(FARM_ROLES).filter(([k])=>k!=='owner').map(([k,v])=>{
             const Icon = v.icon;
             return (
-              <label key={k} className={cn(
-                'flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all',
-                form.role===k ? 'border-[#2D5016] bg-[#eef5dd]' : 'border-[#e8e0d0] hover:border-[#6B7C3A]'
-              )}>
+              <label key={k} className={cn('flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all',
+                form.role===k?'border-[#2D5016] bg-[#eef5dd]':'border-[#e8e0d0] hover:border-[#6B7C3A]')}>
                 <input type="radio" name="role" value={k} checked={form.role===k}
-                  onChange={()=>f('role',k)} className="mt-1"/>
+                  onChange={()=>{ f('role',k); setCustomPerms(null); }} className="mt-1"/>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <Icon size={14} className="text-[#2D5016]"/>
-                    <span className="text-sm font-semibold text-[#1a3009]">{v.label}</span>
-                    <span className={`badge text-[9px] ${v.color}`}>{v.label}</span>
+                    <span className="text-sm font-semibold">{v.label}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-0.5">{v.description}</p>
                 </div>
@@ -144,48 +193,52 @@ function InviteForm({ farmId, onClose, onInvited }) {
         </div>
       </div>
 
+      {/* Permission checkboxes */}
       <div>
-        <label className="form-label">Personal Message (optional)</label>
-        <textarea className="form-input resize-y min-h-[60px]" value={form.message}
-          onChange={e=>f('message',e.target.value)}
-          placeholder="Hi James, I'm inviting you to manage our dairy farm on FarmCore…"/>
+        <div className="flex items-center justify-between mb-2">
+          <label className="form-label mb-0">Permissions (checkboxes)</label>
+          <button className="text-xs text-[#2D5016] underline" onClick={()=>setCustomPerms(null)}>
+            Reset to role defaults
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {ALL_MODULES.map(mod=>(
+            <label key={mod} className={cn(
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg border cursor-pointer text-xs transition-all capitalize',
+              effectivePerms.includes(mod)
+                ? 'bg-[#2D5016] text-white border-[#2D5016]'
+                : 'bg-white border-[#e8e0d0] text-gray-600 hover:border-[#6B7C3A]'
+            )}>
+              <input type="checkbox" checked={effectivePerms.includes(mod)}
+                onChange={()=>togglePerm(mod)} className="sr-only"/>
+              {effectivePerms.includes(mod) && <Check size={10}/>}
+              {mod}
+            </label>
+          ))}
+        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-2 border-t border-[#e8e0d0]">
         <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleInvite} disabled={loading || !canInvite} className="btn btn-primary">
-          {loading ? 'Sending…' : <><Send size={14}/>Send Invite</>}
+        <button onClick={handleAdd} disabled={loading||!canInvite} className="btn btn-primary">
+          {loading ? 'Adding…' : <><Plus size={14}/>Add to Farm</>}
         </button>
       </div>
     </div>
   );
 }
 
-// ── ROLE BADGE ────────────────────────────────────────────────
-function RoleBadge({ role }) {
-  const r = FARM_ROLES[role] || FARM_ROLES.viewer;
-  const Icon = r.icon;
-  return (
-    <span className={cn('badge gap-1', r.color)}>
-      <Icon size={10}/>{r.label}
-    </span>
-  );
-}
-
 // ── PERMISSIONS TABLE ─────────────────────────────────────────
 function PermissionsTable() {
-  const modules = ['animals','production','health','reproduction','feed','finance','employees','procurement','assets','crops','calendar','lab','reports','team'];
+  const modules = ALL_MODULES;
   const roles   = Object.entries(FARM_ROLES);
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr>
             <th className="table-th text-left">Module</th>
-            {roles.map(([k,v])=>(
-              <th key={k} className="table-th text-center">{v.label}</th>
-            ))}
+            {roles.map(([k,v])=><th key={k} className="table-th text-center">{v.label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -193,14 +246,8 @@ function PermissionsTable() {
             <tr key={mod} className="hover:bg-[#F5F0E8]/60">
               <td className="table-td font-medium capitalize">{mod}</td>
               {roles.map(([k,v])=>{
-                const hasAccess = v.permissions.includes('all') || v.permissions.includes(mod);
-                return (
-                  <td key={k} className="table-td text-center">
-                    {hasAccess
-                      ? <span className="text-green-600 font-bold">✓</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                );
+                const has = v.permissions.includes('all')||v.permissions.includes(mod);
+                return <td key={k} className="table-td text-center">{has?<span className="text-green-600 font-bold">✓</span>:<span className="text-gray-300">—</span>}</td>;
               })}
             </tr>
           ))}
@@ -210,148 +257,14 @@ function PermissionsTable() {
   );
 }
 
-// ── INVITE ACCEPT PAGE ────────────────────────────────────────
+// ── INVITE ACCEPT PAGE (kept for backward compat) ─────────────
 export function InviteAcceptPage({ token }) {
-  const { user, signIn, signUp, refreshFarm } = useAuth();
-  const [invite,  setInvite]  = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [step,    setStep]    = useState('loading'); // loading|register|login|done|expired
-  const [form,    setForm]    = useState({ fullName:'', password:'' });
-  const [error,   setError]   = useState('');
-  const f = (k,v) => setForm(p=>({...p,[k]:v}));
-
-  useEffect(() => {
-    supabase.from('pending_invites')
-      .select('*, farms(name)')
-      .eq('token', token)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) { setStep('expired'); setLoading(false); return; }
-        const expired = new Date(data.expires_at) < new Date();
-        if (expired) { setStep('expired'); setLoading(false); return; }
-        setInvite(data);
-        setStep(user ? 'accept' : 'register');
-        setLoading(false);
-      });
-  }, [token, user]);
-
-  const handleAccept = async (isNewUser = false) => {
-    setError(''); setLoading(true);
-    try {
-      let acceptUserId = user?.id;
-
-      if (isNewUser) {
-        const { data: authData } = await signUp({ email: invite.email, password: form.password, fullName: form.fullName });
-        acceptUserId = authData?.user?.id;
-        if (!acceptUserId) throw new Error('Signup failed');
-      }
-
-      // Add to farm_users
-      await supabase.from('farm_users').insert({
-        farm_id: invite.farm_id, user_id: acceptUserId, role: invite.role, invited_by: invite.invited_by,
-      });
-
-      // Mark invite as used
-      await supabase.from('pending_invites').update({ used_at: new Date().toISOString() }).eq('id', invite.id);
-
-      await refreshFarm?.();
-      setStep('done');
-    } catch (err) {
-      setError(err.message || 'Failed to accept invite.');
-    } finally { setLoading(false); }
-  };
-
-  if (loading) return (
-    <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center">
-      <div className="text-center"><div className="text-5xl mb-3 animate-pulse">🌾</div><p className="text-gray-400">Loading invite…</p></div>
-    </div>
-  );
-
-  if (step === 'expired') return (
-    <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center">
-        <div className="text-5xl mb-4">⏰</div>
-        <h2 style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016] mb-2">Invite Expired</h2>
-        <p className="text-sm text-gray-500">This invitation has expired or is invalid. Ask your farm admin to send a new one.</p>
-      </div>
-    </div>
-  );
-
-  if (step === 'done') return (
-    <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center">
-        <div className="text-5xl mb-4">🎉</div>
-        <h2 style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016] mb-2">Welcome to {invite?.farms?.name}!</h2>
-        <p className="text-sm text-gray-500 mb-4">You've joined as <strong>{FARM_ROLES[invite?.role]?.label}</strong>.</p>
-        <a href="/" className="btn btn-primary justify-center w-full">Open FarmCore 🌾</a>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#F5F0E8] flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl p-8 max-w-sm w-full">
-        <div className="text-center mb-6">
-          <div className="text-4xl mb-3">🌾</div>
-          <h2 style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016] mb-1">You've been invited!</h2>
-          <p className="text-sm text-gray-500">
-            Join <strong>{invite?.farms?.name}</strong> on FarmCore as <RoleBadge role={invite?.role}/>
-          </p>
-          {invite?.message && (
-            <div className="bg-[#F5F0E8] rounded-lg p-3 mt-3 text-sm text-gray-600 italic">"{invite.message}"</div>
-          )}
-        </div>
-
-        {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm text-red-700">{error}</div>}
-
-        {step === 'register' && (
-          <div className="space-y-4">
-            <p className="text-xs text-gray-500 text-center">Create your FarmCore account to accept this invite.</p>
-            <div>
-              <label className="form-label">Your Full Name</label>
-              <input className="form-input" value={form.fullName} onChange={e=>f('fullName',e.target.value)} placeholder="James Mwangi"/>
-            </div>
-            <div>
-              <label className="form-label">Email</label>
-              <input className="form-input" value={invite?.email} disabled className="opacity-60"/>
-            </div>
-            <div>
-              <label className="form-label">Create Password</label>
-              <input className="form-input" type="password" value={form.password}
-                onChange={e=>f('password',e.target.value)} placeholder="Min 8 characters"/>
-            </div>
-            <button onClick={()=>handleAccept(true)} disabled={loading} className="btn btn-primary w-full justify-center py-2.5">
-              {loading?'Creating account…':'Create Account & Join Farm'}
-            </button>
-            <p className="text-xs text-center text-gray-400">
-              Already have an account?{' '}
-              <button onClick={()=>setStep('login')} className="text-[#2D5016] font-semibold">Sign in instead</button>
-            </p>
-          </div>
-        )}
-
-        {step === 'login' && (
-          <div className="space-y-4">
-            <p className="text-xs text-gray-500 text-center">Sign in to accept this invite.</p>
-            <div>
-              <label className="form-label">Password</label>
-              <input className="form-input" type="password" value={form.password}
-                onChange={e=>f('password',e.target.value)}/>
-            </div>
-            <button onClick={async()=>{
-              setLoading(true);
-              try {
-                await signIn({ email: invite.email, password: form.password });
-                await handleAccept(false);
-              } catch(e) { setError(e.message); setLoading(false); }
-            }} className="btn btn-primary w-full justify-center">
-              {loading?'Signing in…':'Sign In & Join Farm'}
-            </button>
-            <p className="text-xs text-center text-gray-400">
-              <button onClick={()=>setStep('register')} className="text-[#2D5016] font-semibold">Create new account instead</button>
-            </p>
-          </div>
-        )}
+      <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center">
+        <div className="text-5xl mb-4">🌾</div>
+        <h2 className="text-xl font-semibold text-[#2D5016] mb-2">Join FarmCore</h2>
+        <p className="text-sm text-gray-500">Ask your farm admin to add you directly from the Team Management page using your email or phone number.</p>
       </div>
     </div>
   );
@@ -360,12 +273,11 @@ export function InviteAcceptPage({ token }) {
 // ── MAIN TEAM MODULE ──────────────────────────────────────────
 export default function TeamManagement() {
   const { farm, farmUser, user, license } = useAuth();
-  const [members,  setMembers]  = useState([]);
-  const [invites,  setInvites]  = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [showInvite, setShowInvite] = useState(false);
-  const [tab,      setTab]      = useState('members');
-  const [copied,   setCopied]   = useState(null);
+  const [members,   setMembers]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showAdd,   setShowAdd]   = useState(false);
+  const [tab,       setTab]       = useState('members');
+  const [memberSearch, setMemberSearch] = useState('');
 
   const isOwnerOrAdmin = ['owner','admin'].includes(farmUser?.role);
   const isOwner        = farmUser?.role === 'owner';
@@ -374,73 +286,51 @@ export default function TeamManagement() {
     if (!farm?.id) return;
     setLoading(true);
     try {
-      const { data: members } = await supabase
-        .from('farm_users')
-        .select('*, profiles(full_name, avatar_url)')
+      const { data } = await supabase.from('farm_users')
+        .select('*, profiles(full_name, avatar_url, email)')
         .eq('farm_id', farm.id);
-      setMembers(members || []);
-
-      const { data: invites } = await supabase
-        .from('pending_invites')
-        .select('*')
-        .eq('farm_id', farm.id)
-        .is('used_at', null)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false });
-      setInvites(invites || []);
+      setMembers(data || []);
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { loadData(); }, [farm?.id]);
+  useEffect(()=>{ loadData(); },[farm?.id]);
 
   const changeRole = async (memberId, newRole) => {
     if (!isOwnerOrAdmin) return;
-    await supabase.from('farm_users').update({ role: newRole }).eq('id', memberId);
+    await supabase.from('farm_users').update({ role:newRole }).eq('id', memberId);
     loadData();
   };
 
   const removeMember = async (memberId, memberUserId) => {
     if (memberUserId === user?.id) { alert("You can't remove yourself."); return; }
-    if (!confirm('Remove this team member?')) return;
+    if (!confirm('Remove this team member from the farm?')) return;
     await supabase.from('farm_users').delete().eq('id', memberId);
     loadData();
   };
 
-  const cancelInvite = async (inviteId) => {
-    await supabase.from('pending_invites').delete().eq('id', inviteId);
-    loadData();
-  };
-
-  const copyInviteLink = (token) => {
-    const link = `${window.location.origin}/invite/${token}`;
-    navigator.clipboard.writeText(link);
-    setCopied(token);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
-  const resendInvite = async (invite) => {
-    // In production this would trigger an email via Supabase Edge Function
-    // For now copy the link
-    copyInviteLink(invite.token);
-    alert(`Invite link copied! Share this with ${invite.email}`);
-  };
+  const filteredMembers = useMemo(()=>
+    members.filter(m=>
+      !memberSearch ||
+      (m.profiles?.full_name||'').toLowerCase().includes(memberSearch.toLowerCase()) ||
+      (m.profiles?.email||'').toLowerCase().includes(memberSearch.toLowerCase()) ||
+      m.role.toLowerCase().includes(memberSearch.toLowerCase())
+    ),[members, memberSearch]);
 
   const memberCols = [
     { key:'profiles', label:'Member', render:(_,row)=>(
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-[#eef5dd] flex items-center justify-center text-xs font-bold text-[#2D5016] flex-shrink-0">
-            {getInitials(row.profiles?.full_name || 'U')}
+            {getInitials(row.profiles?.full_name||'U')}
           </div>
           <div>
-            <p className="text-sm font-medium">{row.profiles?.full_name || 'Unnamed User'}</p>
-            <p className="text-xs text-gray-400">{row.user_id === user?.id ? 'You' : ''}</p>
+            <p className="text-sm font-medium">{row.profiles?.full_name||'Unnamed User'}</p>
+            <p className="text-xs text-gray-400">{row.profiles?.email||''} {row.user_id===user?.id?'· You':''}</p>
           </div>
         </div>
       )},
     { key:'role', label:'Role', render:(v,row)=>(
         isOwnerOrAdmin && row.user_id !== user?.id
-          ? <select className="form-input py-1 text-xs w-36"
-              value={v} onChange={e=>changeRole(row.id, e.target.value)}>
+          ? <select className="form-input py-1 text-xs w-36" value={v} onChange={e=>changeRole(row.id,e.target.value)}>
               {Object.entries(FARM_ROLES).filter(([k])=>k!=='owner').map(([k,r])=>(
                 <option key={k} value={k}>{r.label}</option>
               ))}
@@ -450,7 +340,7 @@ export default function TeamManagement() {
     { key:'joined_at', label:'Joined', render:v=>formatDate(v) },
     { key:'id', label:'', render:(_,row)=>(
         isOwnerOrAdmin && row.user_id !== user?.id
-          ? <button onClick={()=>removeMember(row.id, row.user_id)}
+          ? <button onClick={()=>removeMember(row.id,row.user_id)}
               className="btn btn-secondary py-1 px-2 text-xs text-red-500 hover:bg-red-50">
               <UserX size={12}/>Remove
             </button>
@@ -458,93 +348,63 @@ export default function TeamManagement() {
       )},
   ];
 
-  const inviteCols = [
-    { key:'email',      label:'Email',   render:v=><span className="font-medium">{v}</span> },
-    { key:'role',       label:'Role',    render:v=><RoleBadge role={v}/> },
-    { key:'created_at', label:'Sent',    render:v=>formatDate(v) },
-    { key:'expires_at', label:'Expires', render:v=>{ const d=Math.ceil((new Date(v)-new Date())/86400000); return <span className={d<2?'text-red-600 font-semibold':'text-gray-500'}>in {d}d</span>; }},
-    { key:'token', label:'', render:(token,row)=>(
-        <div className="flex gap-1">
-          <button onClick={()=>copyInviteLink(token)}
-            className="btn btn-secondary py-1 px-2 text-xs">
-            {copied===token?<><Check size={12}/>Copied!</>:<><Copy size={12}/>Copy Link</>}
-          </button>
-          <button onClick={()=>resendInvite(row)}
-            className="btn btn-secondary py-1 px-2 text-xs">
-            <Mail size={12}/>Resend
-          </button>
-          <button onClick={()=>cancelInvite(row.id)}
-            className="btn btn-secondary py-1 px-2 text-xs text-red-500">
-            <Trash2 size={12}/>
-          </button>
-        </div>
-      )},
-  ];
+  const roleCount = Object.entries(FARM_ROLES).reduce((acc,[k])=>{
+    acc[k] = members.filter(m=>m.role===k).length; return acc;
+  },{});
 
   return (
     <div className="page-content">
       <PageHeader
         title="Team Management"
         subtitle={`${members.length} members · ${farm?.name}`}
-        actions={
-          isOwnerOrAdmin && (
-            <button onClick={()=>setShowInvite(true)} className="btn btn-primary">
-              <Plus size={15}/>Invite Team Member
-            </button>
-          )
-        }
+        actions={isOwnerOrAdmin && (
+          <button onClick={()=>setShowAdd(true)} className="btn btn-primary">
+            <Plus size={15}/>Add Team Member
+          </button>
+        )}
       />
 
       <StatGrid cols={4}>
-        <KPICard label="Total Members" value={members.length} icon="👥"/>
-        <KPICard label="Pending Invites" value={invites.length} icon="📧" color={invites.length>0?'#d97706':undefined}/>
-        <KPICard label="Your Role" value={FARM_ROLES[farmUser?.role]?.label||'—'} icon="🎭"/>
-        <KPICard label="User Limit" value={`${members.length} / ${license?.user_limit||2}`} icon="📊"/>
+        <KPICard label="Total Members" value={members.length}      icon="👥"/>
+        <KPICard label="Admins/Managers" value={(roleCount.admin||0)+(roleCount.manager||0)} icon="🛡️"/>
+        <KPICard label="Workers/Vets"  value={(roleCount.worker||0)+(roleCount.vet||0)} icon="👷"/>
+        <KPICard label="Viewers"       value={roleCount.viewer||0}  icon="👁️"/>
       </StatGrid>
 
       <div className="flex gap-2 mb-4">
-        {[['members',`Members (${members.length})`],['invites',`Pending Invites (${invites.length})`],['permissions','Permissions']].map(([k,l])=>(
+        {[['members','Members'],['permissions','Role Permissions']].map(([k,l])=>(
           <button key={k} onClick={()=>setTab(k)}
-            className={cn('px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
-              tab===k?'bg-[#2D5016] text-white':'bg-white border border-[#e8e0d0] text-[#6B7C3A]')}>
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${tab===k?'bg-[#2D5016] text-white':'bg-white border border-[#e8e0d0] text-[#6B7C3A]'}`}>
             {l}
           </button>
         ))}
       </div>
 
       {tab==='members' && (
-        <div className="card">
-          <DataTable columns={memberCols} rows={members} loading={loading} emptyText="No team members yet."/>
-        </div>
-      )}
-
-      {tab==='invites' && (
         <>
-          {invites.length===0
-            ? <div className="card text-center py-12">
-                <div className="text-4xl mb-3">📧</div>
-                <p className="text-sm font-semibold text-[#2D5016] mb-1">No pending invites</p>
-                <p className="text-xs text-gray-500 mb-4">Invite team members to collaborate on your farm.</p>
-                {isOwnerOrAdmin && <button onClick={()=>setShowInvite(true)} className="btn btn-primary justify-center mx-auto"><Plus size={14}/>Send First Invite</button>}
-              </div>
-            : <div className="card">
-                <DataTable columns={inviteCols} rows={invites} emptyText="No pending invites."/>
-              </div>
-          }
+          <div className="relative mb-4">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input className="form-input pl-8" placeholder="Search members by name, email or role…"
+              value={memberSearch} onChange={e=>setMemberSearch(e.target.value)}/>
+          </div>
+          <div className="card">
+            {loading
+              ? <p className="text-sm text-gray-400 text-center py-8">Loading members…</p>
+              : <DataTable columns={memberCols} rows={filteredMembers} emptyText="No team members yet."/>}
+          </div>
         </>
       )}
 
       {tab==='permissions' && (
-        <SectionCard title="Role Permissions Matrix">
-          <p className="text-xs text-gray-500 mb-4">Overview of what each role can access in FarmCore.</p>
+        <div className="card">
+          <p className="text-xs text-gray-500 mb-3">This table shows default permissions per role. Individual permissions can be customized when adding a member.</p>
           <PermissionsTable/>
-        </SectionCard>
+        </div>
       )}
 
-      {showInvite && (
-        <Modal open title="Invite Team Member" subtitle={`Inviting to ${farm?.name}`}
-          onClose={()=>setShowInvite(false)} size="lg">
-          <InviteForm farmId={farm?.id} onClose={()=>setShowInvite(false)} onInvited={loadData}/>
+      {showAdd && (
+        <Modal open title="Add Team Member" subtitle="Create or link a user account directly" onClose={()=>setShowAdd(false)} size="lg">
+          <AddMemberForm farmId={farm?.id} onClose={()=>setShowAdd(false)} onAdded={loadData}/>
         </Modal>
       )}
     </div>
