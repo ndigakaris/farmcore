@@ -59,6 +59,14 @@ Keep it concise. No bullet points. End with an encouraging line.`;
   }, [animals, milkLogs, transactions, treatments, feedInventory, employees, attendance, farm, today, last7, last30]);
 
   const fetchBrief = useCallback(async () => {
+    // AI brief only works on Vercel — skip silently on localhost
+    const isLocal = window.location.hostname === 'localhost' ||
+                    window.location.hostname === '127.0.0.1';
+    if (isLocal) {
+      setError('local');
+      setFetched(true);
+      return;
+    }
     setLoading(true); setError('');
     try {
       const res = await fetch('/api/farm-brief', {
@@ -66,15 +74,18 @@ Keep it concise. No bullet points. End with an encouraging line.`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: buildPrompt() }),
       });
+      // Guard: response might be HTML (404 page) not JSON
+      const contentType = res.headers.get('content-type')||'';
+      if (!contentType.includes('application/json')) {
+        throw new Error('API route not available. Deploy to Vercel to activate AI brief.');
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error||'Server error');
       setBrief(data.brief||'');
       setLastFetch(new Date());
       setFetched(true);
     } catch(err) {
-      setError(err.message.includes('fetch')||err.message.includes('network')
-        ? 'Could not reach the AI service. Make sure ANTHROPIC_API_KEY is set in Vercel environment variables.'
-        : err.message);
+      setError(err.message);
     } finally { setLoading(false); }
   }, [buildPrompt]);
 
@@ -133,7 +144,16 @@ Keep it concise. No bullet points. End with an encouraging line.`;
           </div>
         )}
 
-        {error && !loading && (
+        {error==='local' && (
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🚀</span>
+            <div>
+              <p className="text-white/80 text-sm font-medium">AI Brief activates after deployment</p>
+              <p className="text-white/50 text-xs mt-0.5">Push to GitHub → Vercel deploys → AI brief goes live automatically. Add <strong className="text-white/70">GEMINI_API_KEY</strong> in Vercel environment variables.</p>
+            </div>
+          </div>
+        )}
+        {error && error!=='local' && !loading && (
           <div className="flex items-start gap-3">
             <span className="text-amber-300 text-lg">⚠️</span>
             <div>
