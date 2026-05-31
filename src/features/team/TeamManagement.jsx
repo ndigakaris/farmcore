@@ -72,6 +72,17 @@ const genPassword = () => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
   return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 };
+
+// Next member code = one above the highest existing W### in THIS farm.
+// Count-based codes repeat after a member is removed, which collides with the
+// unique index — this never reuses a number.
+function nextUserCode(members = []) {
+  const max = members
+    .map(m => /^W(\d+)$/i.exec(m.user_code || ''))
+    .filter(Boolean)
+    .reduce((hi, x) => Math.max(hi, parseInt(x[1], 10)), 0);
+  return `W${String(max + 1).padStart(3, '0')}`;
+}
 const isLocalhost = () =>
   typeof window !== 'undefined' &&
   ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -107,7 +118,7 @@ function CopyField({ label, value }) {
 }
 
 // ── Add / Edit Member ─────────────────────────────────────────
-function MemberModal({ farmId, member, customRoles, memberCount, currentUserId, onClose, onSaved }) {
+function MemberModal({ farmId, member, customRoles, nextCode, currentUserId, onClose, onSaved }) {
   const isEdit = !!member;
   const isOwnerRow = member?.role === 'owner';
 
@@ -185,7 +196,7 @@ function MemberModal({ farmId, member, customRoles, memberCount, currentUserId, 
         return;
       }
 
-      const code = `W${String(memberCount + 1).padStart(3, '0')}`;
+      const code = nextCode;
 
       if (lookup.found) {
         // Existing account → just link to this farm.
@@ -762,7 +773,7 @@ export default function TeamManagement() {
         <Modal open title={editMember ? `Edit — ${editMember.profiles?.full_name || 'Member'}` : 'Add team member'}
           onClose={() => { setShowMember(false); setEditMember(null); }} size="lg">
           <MemberModal farmId={farm?.id} member={editMember} customRoles={customRoles}
-            memberCount={members.length} currentUserId={user?.id}
+            nextCode={nextUserCode(members)} currentUserId={user?.id}
             onClose={() => { setShowMember(false); setEditMember(null); loadData(); }} onSaved={loadData}/>
         </Modal>
       )}
