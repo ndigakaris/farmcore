@@ -17,13 +17,43 @@ const withTimeout = (promise, ms = 8000, msg = 'Request timed out. Check your in
     new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms))
   ]);
 
+// ── Farm cache ────────────────────────────────────────────────
+// We persist the loaded farm locally and rehydrate it on reload. This is what
+// keeps a reload on the dashboard instead of flashing the setup wizard while
+// the network round-trip happens (or if it briefly fails). Cache is keyed by
+// user id so a different account can't pick up a stale farm.
+const FARM_CACHE_KEY = 'farmcore_farm_cache';
+
+const readFarmCache = () => {
+  try { return JSON.parse(localStorage.getItem(FARM_CACHE_KEY)) || null; }
+  catch { return null; }
+};
+const writeFarmCache = (userId, farm, farmUser) => {
+  try { localStorage.setItem(FARM_CACHE_KEY, JSON.stringify({ userId, farm, farmUser })); }
+  catch { /* storage full / unavailable — non-fatal */ }
+};
+const clearFarmCache = () => {
+  try { localStorage.removeItem(FARM_CACHE_KEY); } catch { /* noop */ }
+};
+
 export function AuthProvider({ children }) {
   const [user,       setUser]       = useState(null);
   const [profile,    setProfile]    = useState(null);
-  const [farm,       setFarm]       = useState(null);
-  const [farmUser,   setFarmUser]   = useState(null);
+  // Rehydrate farm from local cache immediately so a reload never flashes the
+  // setup wizard. The cached value is verified against the session user-id in
+  // init() below, and refreshed from Supabase in the background.
+  const [farm,       setFarm]       = useState(() => readFarmCache()?.farm || null);
+  const [farmUser,   setFarmUser]   = useState(() => readFarmCache()?.farmUser || null);
   const [loading,    setLoading]    = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced');
+
+  // farmResolved: have we DEFINITIVELY determined the user's farm membership?
+  //   false  → still loading, or the lookup errored (do NOT show onboarding)
+  //   true   → query succeeded; `farm` is either the real farm or genuinely null
+  // farmError: set when the farm lookup fails so the UI can offer a retry
+  // instead of wrongly forcing the setup wizard.
+  const [farmResolved, setFarmResolved] = useState(false);
+  const [farmError,    setFarmError]    = useState(null);
 
   // Tracks the currently authenticated user-id so we can detect repeat
   // SIGNED_IN events (e.g. Supabase re-fires SIGNED_IN when you focus the tab
@@ -41,19 +71,39 @@ export function AuthProvider({ children }) {
   }, []);
 
   const loadFarmData = useCallback(async (userId) => {
+    setFarmError(null);
     try {
-      const { data: fu } = await withTimeout(
-        supabase.from('farm_users').select('*, farms(*)').eq('user_id', userId).maybeSingle(),
+      // NOTE: use a list query, not .maybeSingle(). A user can belong to more
+      // than one farm (that's the whole point of farm_users), and .maybeSingle()
+      // ERRORS on >1 row, which previously dropped the user into onboarding.
+      const { data: rows, error } = await withTimeout(
+        supabase
+          .from('farm_users')
+          .select('*, farms(*)')
+          .eq('user_id', userId)
+          .order('joined_at', { ascending: true }),
         5000
       );
-      if (!fu) {
-        // No farm yet — user will be sent to onboarding
-        setFarmUser(null);
-        setFarm(null);
+
+      // A real error (RLS / network / timeout) is NOT the same as "no farm".
+      // Surface it and bail WITHOUT clearing state, so reload doesn't wrongly
+      // send an existing user to the setup wizard.
+      if (error) throw error;
+
+      const fu = rows?.[0] || null;
+
+      if (!fu || !fu.farms) {
+        // Server returned no farm. Farm creation is intentionally parked for
+        // now, so we do NOT route to the wizard: if we already have a farm
+        // (from cache or a prior load), keep showing it.
+        setFarmResolved(true);
         return;
       }
+
       setFarmUser(fu);
       setFarm(fu.farms);
+      setFarmResolved(true);
+      writeFarmCache(userId, fu.farms, fu);   // remember for instant reloads
 
       // Kick off background sync — non-blocking, done well after loading flips
       setTimeout(() => {
@@ -62,7 +112,11 @@ export function AuthProvider({ children }) {
         });
       }, 1000);
     } catch (err) {
+      // Could not determine farm membership. Leave any existing farm in place
+      // (the cached one keeps the user on the dashboard) and just log it.
       console.warn('[Auth] loadFarmData:', err.message);
+      setFarmError(err.message || 'Could not load your farm. Check your connection.');
+      setFarmResolved(false);
     }
   }, []);
 
@@ -82,10 +136,23 @@ export function AuthProvider({ children }) {
         if (session?.user && mounted) {
           userIdRef.current = session.user.id;
           setUser(session.user);
-          // Await both so we don't flicker through "<FarmSetup/>" before
-          // the farm row arrives.
+
+          // The cached farm we rehydrated synchronously might belong to a
+          // previously signed-in account. If so, drop it before loading.
+          const cached = readFarmCache();
+          if (cached && cached.userId !== session.user.id) {
+            clearFarmCache();
+            setFarm(null);
+            setFarmUser(null);
+          }
+
+          // Refresh profile + farm from the server (background-ish). The cached
+          // farm already keeps us on the dashboard, so this just keeps it fresh.
           await loadProfile(session.user.id);
           if (mounted) await loadFarmData(session.user.id);
+        } else if (mounted) {
+          // No session → make sure no stale farm lingers.
+          clearFarmCache();
         }
       } catch (e) {
         console.warn('[Auth] init error:', e.message);
@@ -129,6 +196,8 @@ export function AuthProvider({ children }) {
           userIdRef.current = null;
           setUser(null); setProfile(null); setFarm(null);
           setFarmUser(null);
+          setFarmResolved(false); setFarmError(null);
+          clearFarmCache();
           stopBackgroundSync();
           setLoading(false);
         }
@@ -199,6 +268,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, profile, farm, farmUser,
       loading, syncStatus,
+      farmResolved, farmError,
       signUp, signIn, signOut,
       createFarm, refreshFarm,
     }}>

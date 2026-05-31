@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
 import { useApp }  from './context/AppContext.jsx';
 
-// Auth & onboarding
-import AuthPage, { FarmSetup } from './features/auth/AuthPages.jsx';
+// Auth (farm-creation wizard is parked for now — not routed to on reload)
+import AuthPage from './features/auth/AuthPages.jsx';
 
 // Shell
 import Sidebar from './components/Sidebar.jsx';
@@ -67,19 +67,55 @@ function FeaturePage({ page, onNav }) {
   }
 }
 
+// ── Farm load error (network / RLS) — offer retry, never silently onboard ──
+function FarmLoadError({ error, onRetry }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F0E8] p-6">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm text-center">
+        <div className="text-5xl mb-4">🌾</div>
+        <h2 className="text-lg font-semibold text-[#2D5016] mb-1">Couldn't load your farm</h2>
+        <p className="text-sm text-gray-500 mb-6">
+          {error || 'Something went wrong reaching the server.'} Your data is safe.
+        </p>
+        <button onClick={onRetry} className="btn btn-primary w-full justify-center py-2.5">
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────
+const ACTIVE_PAGE_KEY = 'farmcore_active_page';
+
 export default function App() {
-  const { user, farm, loading } = useAuth();
+  const { user, farm, loading, farmError, refreshFarm } = useAuth();
   const { mobileNavOpen, setMobileNavOpen } = useApp();
-  const [page, setPage] = useState('dashboard');
+
+  // Restore the last-open feature so a reload returns there instead of
+  // resetting to the dashboard.
+  const [page, setPage] = useState(() => {
+    try { return localStorage.getItem(ACTIVE_PAGE_KEY) || 'dashboard'; }
+    catch { return 'dashboard'; }
+  });
 
   if (loading) return <BootLoader />;
   if (!user)   return <AuthPage />;
-  if (!farm)   return <FarmSetup />;
 
-  // Navigate + auto-close the mobile drawer
+  // User is authenticated. The farm is rehydrated from local cache on reload,
+  // so we land straight on the dashboard/last page. Farm creation + licensing
+  // are intentionally parked, so we NEVER route to the setup wizard here. If
+  // the background refresh failed AND we have no cached farm, show a retry
+  // (not onboarding); otherwise keep loading.
+  if (!farm) {
+    if (farmError) return <FarmLoadError error={farmError} onRetry={refreshFarm} />;
+    return <BootLoader />;
+  }
+
+  // Navigate + remember the page + auto-close the mobile drawer
   const handleNav = (id) => {
     setPage(id);
+    try { localStorage.setItem(ACTIVE_PAGE_KEY, id); } catch { /* noop */ }
     setMobileNavOpen(false);
   };
 
