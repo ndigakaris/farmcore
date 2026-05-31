@@ -300,7 +300,7 @@ export default function Dashboard({ onNav }) {
       </StatGrid>
 
       {/* ④ Row 1: Milk chart + Alerts */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         <SectionCard title="Daily Milk (L) — Last 7 Days" className="col-span-2">
           <ResponsiveContainer width="100%" height={190}>
             <BarChart data={milkChart} barCategoryGap="30%">
@@ -331,7 +331,7 @@ export default function Dashboard({ onNav }) {
       </div>
 
       {/* ⑤ Row 2: P&L + Staff */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
         <SectionCard title="P&L Overview — Monthly" className="col-span-2">
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={plChart}>
@@ -376,7 +376,7 @@ export default function Dashboard({ onNav }) {
       {/* ⑥ Upcoming events */}
       <SectionCard title="📅 Upcoming Events — Next 14 Days"
         action={<button onClick={()=>onNav?.('calendar')} className="text-xs text-[#2D5016] hover:underline">Full calendar</button>}>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {!upcomingEvents.length
             ? <p className="text-xs text-gray-400 col-span-5 py-4 text-center">No upcoming events</p>
             : upcomingEvents.map(ev=>{

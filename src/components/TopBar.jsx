@@ -1,18 +1,27 @@
-import { Bell, Moon, Sun, Globe, DollarSign } from 'lucide-react';
+import { Bell, Moon, Sun, DollarSign, Menu } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { SPECIES } from '../constants/index.js';
 import { cn, getInitials } from '../utils/index.js';
 
 export default function TopBar({ onNav }) {
   const { species, setSpecies, currency, setCurrency, theme, setTheme,
-          currentUser, unreadCount, activeSpecies } = useApp();
+          currentUser, unreadCount, activeSpecies, setMobileNavOpen } = useApp();
 
- const visibleSpecies = ['all', ...(activeSpecies || [])];
+  const visibleSpecies = ['all', ...(activeSpecies || [])];
 
   return (
-    <div className="bg-white border-b border-[#e8e0d0] px-5 h-12 flex items-center gap-3 flex-shrink-0">
+    <div className="bg-white border-b border-[#e8e0d0] px-3 sm:px-5 h-12 flex items-center gap-2 sm:gap-3 flex-shrink-0">
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setMobileNavOpen(true)}
+        className="p-1.5 -ml-1 rounded-lg hover:bg-[#F5F0E8] transition-colors text-[#2D5016] lg:hidden flex-shrink-0"
+        aria-label="Open menu"
+      >
+        <Menu size={18}/>
+      </button>
+
       {/* Species tabs */}
-      <div className="flex gap-1 bg-[#F5F0E8] rounded-lg p-0.5 flex-1 overflow-x-auto">
+      <div className="flex gap-1 bg-[#F5F0E8] rounded-lg p-0.5 flex-1 min-w-0 overflow-x-auto no-scrollbar">
         {visibleSpecies.map(s => {
           const sp = SPECIES[s];
           if (!sp) return null;
@@ -32,10 +41,10 @@ export default function TopBar({ onNav }) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
         <button
           onClick={() => setCurrency(c => c === 'KES' ? 'USD' : 'KES')}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#F5F0E8] text-[#2D5016] hover:bg-[#e8e0d0] transition-colors"
+          className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold bg-[#F5F0E8] text-[#2D5016] hover:bg-[#e8e0d0] transition-colors"
         >
           <DollarSign size={12}/>{currency}
         </button>
@@ -59,8 +68,8 @@ export default function TopBar({ onNav }) {
           )}
         </button>
 
-        <div className="flex items-center gap-2 pl-2 border-l border-[#e8e0d0]">
-          <div className="w-7 h-7 rounded-full bg-[#2D5016] flex items-center justify-center text-white text-[11px] font-semibold">
+        <div className="flex items-center gap-2 pl-1.5 sm:pl-2 border-l border-[#e8e0d0]">
+          <div className="w-7 h-7 rounded-full bg-[#2D5016] flex items-center justify-center text-white text-[11px] font-semibold flex-shrink-0">
             {getInitials(currentUser?.name)}
           </div>
           <div className="hidden md:block">

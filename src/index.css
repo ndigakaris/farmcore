@@ -17,8 +17,8 @@
 }
 
 @layer components {
-  .kpi-card { @apply bg-white rounded-xl border border-[#e8e0d0] p-4; }
-  .card { @apply bg-white rounded-xl border border-[#e8e0d0] p-4; }
+  .kpi-card { @apply bg-white rounded-xl border border-[#e8e0d0] p-3 sm:p-4; }
+  .card { @apply bg-white rounded-xl border border-[#e8e0d0] p-3 sm:p-4; }
   .btn { @apply px-4 py-2 rounded-lg cursor-pointer text-sm font-medium transition-all duration-150 inline-flex items-center gap-2; }
   .btn-primary { @apply bg-[#2D5016] text-white hover:bg-[#3d6b1f]; }
   .btn-secondary { @apply bg-[#F5F0E8] text-[#2D5016] border border-[#e8e0d0] hover:bg-[#e8e0d0]; }
@@ -34,11 +34,27 @@
   .form-input { @apply w-full text-sm px-3 py-2 border border-[#e8e0d0] rounded-lg bg-white text-[#1a3009] outline-none focus:border-[#3d6b1f] focus:ring-2 focus:ring-green-600/10 transition-all; }
   .table-th { @apply text-xs font-semibold text-[#6B7C3A] uppercase tracking-wide py-2 px-3 border-b-2 border-[#e8e0d0] text-left whitespace-nowrap; }
   .table-td { @apply py-2.5 px-3 border-b border-[#F5F0E8] text-sm text-[#1a3009]; }
-  .modal-backdrop { @apply fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4; }
-  .modal { @apply bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto relative shadow-2xl; }
-  .page-content { @apply flex-1 overflow-y-auto p-5; }
+  .modal-backdrop { @apply fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-3 sm:p-4; }
+  .modal { @apply bg-white rounded-xl p-4 sm:p-6 w-full max-w-lg max-h-[92vh] sm:max-h-[90vh] overflow-y-auto relative shadow-2xl; }
+  .page-content { @apply flex-1 overflow-y-auto p-3 sm:p-5; }
   .lock-banner { @apply flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3; animation: wdPulse 2s ease-in-out infinite; }
   .section-title { @apply text-base font-semibold text-[#2D5016]; font-family: 'Fraunces', serif; }
   .empty-state { @apply flex flex-col items-center justify-center py-16 text-center; }
+
+  /* Species tab pills (TopBar) */
+  .species-tab {
+    @apply flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold
+           text-[#6B7C3A] transition-colors cursor-pointer;
+  }
+  .species-tab.active {
+    @apply bg-white text-[#2D5016] shadow-sm;
+  }
+
   @keyframes wdPulse { 0%,100%{border-color:#fecaca}50%{border-color:#dc2626} }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep horizontal scrolling (e.g. species tabs on mobile) */
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
 }

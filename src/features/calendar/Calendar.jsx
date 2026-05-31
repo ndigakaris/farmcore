@@ -59,9 +59,9 @@ export default function Calendar() {
     <div className="page-content">
       <PageHeader title="Farm Calendar" subtitle="Unified view of all scheduled events"/>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Calendar grid */}
-        <div className="col-span-2 card">
+        <div className="lg:col-span-2 card">
           <div className="flex items-center justify-between mb-4">
             <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-[#F5F0E8]"><ChevronLeft size={18}/></button>
             <h2 style={{fontFamily:'Fraunces,serif'}} className="text-lg font-semibold text-[#2D5016]">

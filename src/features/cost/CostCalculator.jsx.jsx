@@ -391,7 +391,7 @@ function AnimalDetailView({ animal, speciesData, days, sellingPriceOverride, onC
           )}
 
           {/* KPI grid */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
             {[
               { label:'Total Production',    value:`${data.totalLiters.toFixed(1)} L`,        sub:`${data.dailyAvgLiters.toFixed(1)} L/day avg` },
               { label:'Cost per Liter',      value:`KES ${data.costPerLiter.toFixed(2)}`,     sub:`KES ${data.costPerDay.toFixed(0)}/day`, alert:isBelow },

@@ -1,11 +1,11 @@
 // src/context/AuthContext.jsx
 // ─────────────────────────────────────────────────────────────
-// KEY FIX: createFarm now calls a single atomic Supabase RPC
-// instead of 4 separate chained inserts that could race/fail.
-// Everything else (auth, profile, license loading) unchanged.
+// Auth + profile + farm loading. Licensing has been removed —
+// the app runs standalone with no tiers, trials, or feature gates.
+// createFarm uses a single atomic Supabase RPC.
 // ─────────────────────────────────────────────────────────────
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../services/supabase.js';
 import { initialPull, startBackgroundSync, stopBackgroundSync } from '../services/sync.js';
 
@@ -21,10 +21,14 @@ export function AuthProvider({ children }) {
   const [user,       setUser]       = useState(null);
   const [profile,    setProfile]    = useState(null);
   const [farm,       setFarm]       = useState(null);
-  const [license,    setLicense]    = useState(null);
   const [farmUser,   setFarmUser]   = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [syncStatus, setSyncStatus] = useState('synced');
+
+  // Tracks the currently authenticated user-id so we can detect repeat
+  // SIGNED_IN events (e.g. Supabase re-fires SIGNED_IN when you focus the tab
+  // after a token refresh). We must NOT show the loading screen for those.
+  const userIdRef = useRef(null);
 
   const loadProfile = useCallback(async (userId) => {
     try {
@@ -42,16 +46,16 @@ export function AuthProvider({ children }) {
         supabase.from('farm_users').select('*, farms(*)').eq('user_id', userId).maybeSingle(),
         5000
       );
-      if (!fu) return;
+      if (!fu) {
+        // No farm yet — user will be sent to onboarding
+        setFarmUser(null);
+        setFarm(null);
+        return;
+      }
       setFarmUser(fu);
       setFarm(fu.farms);
 
-      const { data: lic } = await withTimeout(
-        supabase.from('licenses').select('*').eq('farm_id', fu.farm_id).maybeSingle(),
-        5000
-      ).catch(() => ({ data: null }));
-      setLicense(lic);
-
+      // Kick off background sync — non-blocking, done well after loading flips
       setTimeout(() => {
         initialPull(fu.farm_id).catch(() => {}).finally(() => {
           startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));
@@ -64,18 +68,24 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
+
+    // Safety net — never trap the user on the boot loader. Bumped to 10s so
+    // we have headroom to await both the profile and the farm query.
     const killSwitch = setTimeout(() => {
       if (mounted) { console.warn('[Auth] Kill switch'); setLoading(false); }
-    }, 4000);
+    }, 10000);
 
     const init = async () => {
       try {
         const { data: { session }, error } = await withTimeout(supabase.auth.getSession(), 5000);
         if (error) throw error;
         if (session?.user && mounted) {
+          userIdRef.current = session.user.id;
           setUser(session.user);
+          // Await both so we don't flicker through "<FarmSetup/>" before
+          // the farm row arrives.
           await loadProfile(session.user.id);
-          if (mounted) loadFarmData(session.user.id);
+          if (mounted) await loadFarmData(session.user.id);
         }
       } catch (e) {
         console.warn('[Auth] init error:', e.message);
@@ -90,20 +100,35 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+
         if (event === 'SIGNED_IN' && session?.user) {
+          // Re-fires on tab focus / token refresh for the SAME user.
+          // Silently refresh the user object — do NOT enter loading state.
+          if (userIdRef.current === session.user.id) {
+            setUser(session.user);
+            return;
+          }
+          // Genuine new sign-in
+          userIdRef.current = session.user.id;
           setUser(session.user);
           setLoading(true);
-          const kill2 = setTimeout(() => { if (mounted) setLoading(false); }, 4000);
+          const kill2 = setTimeout(() => { if (mounted) setLoading(false); }, 10000);
           try {
             await loadProfile(session.user.id);
-            loadFarmData(session.user.id);
+            if (mounted) await loadFarmData(session.user.id);
           } finally {
             clearTimeout(kill2);
             if (mounted) setLoading(false);
           }
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          // Pure token refresh — keep the user object current, no UI churn.
+          setUser(session.user);
+        } else if (event === 'USER_UPDATED' && session?.user) {
+          setUser(session.user);
         } else if (event === 'SIGNED_OUT') {
+          userIdRef.current = null;
           setUser(null); setProfile(null); setFarm(null);
-          setLicense(null); setFarmUser(null);
+          setFarmUser(null);
           stopBackgroundSync();
           setLoading(false);
         }
@@ -138,12 +163,11 @@ export function AuthProvider({ children }) {
   // ── SIGN OUT ──────────────────────────────────────────────────
   const signOut = async () => {
     stopBackgroundSync();
+    userIdRef.current = null;
     await supabase.auth.signOut();
   };
 
-  // ── CREATE FARM — ATOMIC RPC (the fix!) ───────────────────────
-  // One database function does farm + farm_users + license + event log
-  // atomically. No partial state, no race conditions, no spinning.
+  // ── CREATE FARM — ATOMIC RPC ──────────────────────────────────
   const createFarm = async ({ name, county, currency = 'KES', activeSpecies }) => {
     if (!user) throw new Error('Not authenticated');
 
@@ -161,18 +185,8 @@ export function AuthProvider({ children }) {
 
     if (error) throw error;
 
-    // Reload farm data — single query, no race conditions
     await loadFarmData(user.id);
-
     return { id: data.farm_id };
-  };
-
-  // ── REFRESH LICENSE ───────────────────────────────────────────
-  const refreshLicense = async () => {
-    if (!farm) return;
-    const { data } = await supabase.from('licenses')
-      .select('*').eq('farm_id', farm.id).maybeSingle();
-    setLicense(data);
   };
 
   // ── REFRESH FARM ──────────────────────────────────────────────
@@ -181,17 +195,12 @@ export function AuthProvider({ children }) {
     await loadFarmData(user.id);
   };
 
-  const isSuperAdmin =
-    profile?.is_super_admin === true ||
-    (import.meta.env.VITE_SUPER_ADMIN_EMAILS || '')
-      .split(',').map(e => e.trim()).includes(user?.email);
-
   return (
     <AuthContext.Provider value={{
-      user, profile, farm, license, farmUser,
-      loading, syncStatus, isSuperAdmin,
+      user, profile, farm, farmUser,
+      loading, syncStatus,
       signUp, signIn, signOut,
-      createFarm, refreshLicense, refreshFarm,
+      createFarm, refreshFarm,
     }}>
       {children}
     </AuthContext.Provider>

@@ -6,9 +6,6 @@ import { useApp }  from './context/AppContext.jsx';
 // Auth & onboarding
 import AuthPage, { FarmSetup } from './features/auth/AuthPages.jsx';
 
-// License
-import { ExpiredScreen, TrialBanner } from './features/license/LicenseGate.jsx';
-
 // Shell
 import Sidebar from './components/Sidebar.jsx';
 import TopBar  from './components/TopBar.jsx';
@@ -26,7 +23,6 @@ import Procurement   from './features/procurement/Procurement.jsx';
 import Crops         from './features/crops/Crops.jsx';
 import Calendar      from './features/calendar/Calendar.jsx';
 import TeamManagement  from './features/team/TeamManagement.jsx';
-import AdminDashboard  from './features/admin/AdminDashboard.jsx';
 import CostCalculator from './features/cost/CostCalculator.jsx';
 
 // Named exports
@@ -73,28 +69,38 @@ function FeaturePage({ page, onNav }) {
 
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
-  const { user, farm, license, loading, isSuperAdmin } = useAuth();
+  const { user, farm, loading } = useAuth();
+  const { mobileNavOpen, setMobileNavOpen } = useApp();
   const [page, setPage] = useState('dashboard');
 
   if (loading) return <BootLoader />;
   if (!user)   return <AuthPage />;
   if (!farm)   return <FarmSetup />;
 
-  if (license && license.status !== 'active') {
-    return <ExpiredScreen onUpgrade={() => setPage('settings')} />;
-  }
+  // Navigate + auto-close the mobile drawer
+  const handleNav = (id) => {
+    setPage(id);
+    setMobileNavOpen(false);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#faf9f6]">
-      <Sidebar active={page} onNav={setPage} />
+      {/* Sidebar — static column on lg+, slide-in drawer on mobile */}
+      <Sidebar active={page} onNav={handleNav} />
+
+      {/* Mobile overlay behind the drawer */}
+      {mobileNavOpen && (
+        <button
+          aria-label="Close menu"
+          onClick={() => setMobileNavOpen(false)}
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+        />
+      )}
+
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TrialBanner />
-        <TopBar page={page} onNav={setPage} />
+        <TopBar page={page} onNav={handleNav} />
         <main className="flex-1 overflow-auto">
-          {page === 'admin' && isSuperAdmin
-            ? <AdminDashboard />
-            : <FeaturePage page={page} onNav={setPage} />
-          }
+          <FeaturePage page={page} onNav={handleNav} />
         </main>
       </div>
     </div>

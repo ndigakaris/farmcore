@@ -38,7 +38,7 @@ function POForm({ suppliers, onClose }) {
           <button type="button" onClick={addItem} className="text-xs text-[#2D5016] hover:underline">+ Add item</button>
         </div>
         {items.map((it,i)=>(
-          <div key={i} className="grid grid-cols-4 gap-2 mb-2">
+          <div key={i} className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
             <input className="form-input col-span-2" placeholder="Item name" value={it.name} onChange={e=>updateItem(i,'name',e.target.value)}/>
             <input className="form-input" type="number" placeholder="Qty" value={it.qty} onChange={e=>updateItem(i,'qty',e.target.value)}/>
             <input className="form-input" type="number" placeholder="Unit cost" value={it.unitCost} onChange={e=>updateItem(i,'unitCost',e.target.value)}/>

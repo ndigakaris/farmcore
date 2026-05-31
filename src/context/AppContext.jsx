@@ -9,6 +9,7 @@ export function AppProvider({ children }) {
   const { farm, user, farmUser, profile } = useAuth();
 
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isOnline,     setIsOnline]     = useState(navigator.onLine);
   const [syncStatus,   setSyncStatus]   = useState('synced');
   const [unreadCount,  setUnreadCount]  = useState(0);
@@ -84,6 +85,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       // Sidebar
       farmName, sidebarOpen, setSidebarOpen,
+      mobileNavOpen, setMobileNavOpen,
       // Network
       isOnline, syncStatus, setSyncStatus,
       // Notifications

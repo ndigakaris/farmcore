@@ -144,7 +144,7 @@ export default function Finance() {
         <KPICard label="Net Profit" value={formatCurrency(totals.profit)} sub={`${totals.income>0?((totals.profit/totals.income)*100).toFixed(0):0}% margin`} trend={totals.profit>0?'up':'down'} icon="💰" color={totals.profit>0?'#16a34a':'#dc2626'}/>
       </StatGrid>
 
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">
         <SectionCard title="Monthly P&L (KES)" className="col-span-2">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={monthlyPL} barCategoryGap="25%">

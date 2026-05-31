@@ -195,12 +195,12 @@ export function EmptyState({ icon = '📋', title = 'No records yet', message, a
 // ── PAGE HEADER ───────────────────────────────────────────
 export function PageHeader({ title, subtitle, actions }) {
   return (
-    <div className="flex items-start justify-between mb-5">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
       <div>
-        <h1 style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016]">{title}</h1>
+        <h1 style={{fontFamily:'Fraunces,serif'}} className="text-lg sm:text-xl font-semibold text-[#2D5016]">{title}</h1>
         {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex items-center flex-wrap gap-2">{actions}</div>}
     </div>
   );
 }
@@ -214,7 +214,10 @@ export function Badge({ variant = 'gray', children }) {
 export function StatGrid({ children, cols = 4 }) {
   return (
     <div className={cn('grid gap-3 mb-5', {
-      2:'grid-cols-2', 3:'grid-cols-3', 4:'grid-cols-4', 5:'grid-cols-5'
+      2:'grid-cols-2',
+      3:'grid-cols-2 sm:grid-cols-3',
+      4:'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4',
+      5:'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
     }[cols])}>
       {children}
     </div>

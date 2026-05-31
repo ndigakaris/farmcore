@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import supabase from '../../services/supabase.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { canAddUser } from '../../services/license.js';
 import { Modal, PageHeader, KPICard, StatGrid } from '../../components/UI.jsx';
 import { formatDate, getInitials, cn } from '../../utils/index.js';
 import { Plus, Search, LogOut, Edit2, Trash2, ChevronRight,
@@ -47,7 +46,7 @@ function StatusPill({ status }) {
 }
 
 // ── Add/Edit Member Modal ─────────────────────────────────────
-function MemberModal({ farmId, member, customRoles, memberCount, license, currentUserId, onClose, onSaved }) {
+function MemberModal({ farmId, member, customRoles, memberCount, currentUserId, onClose, onSaved }) {
   const isEdit = !!member;
   const [form, setForm] = useState({
     email:    member?.profiles?.email||'',
@@ -64,7 +63,7 @@ function MemberModal({ farmId, member, customRoles, memberCount, license, curren
   const [done,     setDone]     = useState(false);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  const canAdd = canAddUser(license, memberCount);
+  const canAdd = true; // no licensing — unlimited team members
 
   // Check if email exists
   const lookupEmail = async () => {
@@ -99,7 +98,7 @@ function MemberModal({ farmId, member, customRoles, memberCount, license, curren
     if (!form.email.trim())    { setError('Email is required'); return; }
     if (!form.fullName.trim()) { setError('Full name is required'); return; }
     if (!isEdit && !preview)   { setError('Click the search icon to verify the email first'); return; }
-    if (!isEdit && !canAdd)    { setError('User limit reached. Upgrade your plan.'); return; }
+
     setSaving(true); setError('');
     try {
       if (isEdit) {
@@ -235,7 +234,7 @@ function MemberModal({ farmId, member, customRoles, memberCount, license, curren
 
       <div className="flex justify-end gap-3 pt-2 border-t border-[#e8e0d0]">
         <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-        <button onClick={handleSave} disabled={saving||(!isEdit&&!canAdd)} className="btn btn-primary">
+        <button onClick={handleSave} disabled={saving} className="btn btn-primary">
           {saving ? 'Saving…' : isEdit ? <><Save size={14}/>Save Changes</> : <><Plus size={14}/>Add Member</>}
         </button>
       </div>
@@ -344,7 +343,7 @@ function RoleModal({ farmId, role, currentUserId, onClose, onSaved }) {
                 </div>
               </button>
               {isExpanded && (
-                <div className="grid grid-cols-3 gap-2 px-4 py-3 bg-white border-t border-[#e8e0d0]/50">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 px-4 py-3 bg-white border-t border-[#e8e0d0]/50">
                   {group.items.map(p=>(
                     <label key={p} className={cn('flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer text-xs capitalize transition-all',
                       perms.has(p)?'bg-[#2D5016] text-white border-[#2D5016]':'bg-white border-[#e8e0d0] text-gray-600 hover:border-[#2D5016]')}>
@@ -414,7 +413,7 @@ export const FARM_ROLES = SYSTEM_ROLES;
 export function InviteAcceptPage() { return null; }
 
 export default function TeamManagement() {
-  const { farm, farmUser, user, license, signOut } = useAuth();
+  const { farm, farmUser, user, signOut } = useAuth();
   const [tab,          setTab]          = useState('members');
   const [members,      setMembers]      = useState([]);
   const [customRoles,  setCustomRoles]  = useState([]);
@@ -654,7 +653,7 @@ export default function TeamManagement() {
         <Modal open title={editMember?`Edit — ${editMember.profiles?.full_name||'Member'}`:'Add team member'}
           onClose={()=>{setShowMember(false);setEditMember(null);}} size="lg">
           <MemberModal farmId={farm?.id} member={editMember} customRoles={customRoles}
-            memberCount={members.length} license={license} currentUserId={user?.id}
+            memberCount={members.length} currentUserId={user?.id}
             onClose={()=>{setShowMember(false);setEditMember(null);}} onSaved={loadData}/>
         </Modal>
       )}

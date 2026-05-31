@@ -103,8 +103,8 @@ function Register({ onSwitch }) {
 
   return (
     <div>
-      <h2 style={{fontFamily:'Fraunces,serif'}} className="text-2xl font-semibold text-[#2D5016] mb-1">Start your free trial</h2>
-      <p className="text-sm text-gray-500 mb-6">14 days free · No credit card required</p>
+      <h2 style={{fontFamily:'Fraunces,serif'}} className="text-2xl font-semibold text-[#2D5016] mb-1">Create your account</h2>
+      <p className="text-sm text-gray-500 mb-6">Set up your farm in a couple of minutes</p>
 
       {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 text-sm text-red-700">{error}</div>}
 
@@ -270,14 +270,14 @@ export function FarmSetup() {
           <div>
             <div className="text-4xl mb-3">🎉</div>
             <h2 style={{fontFamily:'Fraunces,serif'}} className="text-xl font-semibold text-[#2D5016] mb-1">You're all set!</h2>
-            <p className="text-sm text-gray-500 mb-6">Here's a summary of your farm setup. Your <strong>14-day free trial</strong> starts now.</p>
+            <p className="text-sm text-gray-500 mb-6">Here's a summary of your farm setup. Everything is ready to go.</p>
             <div className="bg-[#F5F0E8] rounded-xl p-4 space-y-3 mb-6">
               {[
                 ['Farm', form.name],
                 ['County', form.county || 'Not specified'],
                 ['Currency', form.currency],
                 ['Livestock', form.activeSpecies.map(s=>SPECIES[s]?.emoji).join(' ')],
-                ['Trial', '14 days free · Up to 50 animals'],
+
               ].map(([k,v])=>(
                 <div key={k} className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-500 uppercase">{k}</span>
