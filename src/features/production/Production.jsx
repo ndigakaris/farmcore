@@ -211,6 +211,20 @@ export default function Production() {
   const todayEggs = useMemo(() => (eggLogs||[]).find(l=>l.date===today)?.total||0, [eggLogs,today]);
   const todayMilkKES = todayMilk * 50;
 
+  // Last calendar month's milk total (e.g. in June this shows all of May).
+  const lastMonth = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth(); // 0-based
+    const prevY = m === 0 ? y - 1 : y;
+    const prevM = m === 0 ? 11 : m - 1;
+    const prefix = `${prevY}-${String(prevM + 1).padStart(2, '0')}`; // 'YYYY-MM'
+    const label = new Date(prevY, prevM, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
+    const litres = (milkLogs||[])
+      .filter(l => (l.date||'').startsWith(prefix))
+      .reduce((s, l) => s + (l.amount||0), 0);
+    return { litres, label };
+  }, [milkLogs]);
+
   const milkChart = useMemo(() => {
     const days = Array.from({length:7},(_,i)=>offsetDate(i-6));
     return days.map(date => {
@@ -255,8 +269,9 @@ export default function Production() {
         actions={<button className="btn btn-primary" onClick={()=>setShowForm(true)}><Plus size={15}/>Log Production</button>}
       />
 
-      <StatGrid cols={4}>
+      <StatGrid cols={5}>
         <KPICard label="Today's Milk" value={`${todayMilk.toFixed(1)}L`} sub="3 cows milked" trend="down" icon="🥛"/>
+        <KPICard label={`Last Month (${lastMonth.label})`} value={`${lastMonth.litres.toFixed(1)}L`} sub="Total milk" icon="📅"/>
         <KPICard label="Today's Eggs" value={`${todayEggs}`} sub="Layer House A" trend="up" icon="🥚"/>
         <KPICard label="Milk Revenue" value={formatCurrency(todayMilkKES)} sub="@ KES 50/L" icon="💰"/>
         <KPICard label="Animals Locked" value={(animals||[]).filter(a=>a.milkLock).length} sub="Withdrawal lock" icon="🔒" color="#dc2626"/>
