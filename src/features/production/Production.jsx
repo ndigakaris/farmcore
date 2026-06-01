@@ -5,7 +5,7 @@ import db from '../../db/schema.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, SectionCard, PageHeader, DataTable, UnitSelector } from '../../components/UI.jsx';
 import { formatDate, offsetDate, todayStr } from '../../utils/index.js';
-import { Plus, AlertTriangle, Lock } from 'lucide-react';
+import { Plus, AlertTriangle, Lock, Search } from 'lucide-react';
 
 const SHIFTS = ['Morning', 'Afternoon', 'Evening'];
 
@@ -20,6 +20,18 @@ function MilkLogForm({ onClose }) {
   const selectedAnimal = animals?.find(a=>a.id===Number(form.animalId));
   const isLocked = selectedAnimal?.milkLock && form.status === 'Sold';
   const revenue = parseFloat(form.amount||0) * parseFloat(form.pricePerLiter||0);
+
+  // Searchable cow picker — search box filters the native dropdown below
+  const [search, setSearch] = useState('');
+  const filteredAnimals = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = animals || [];
+    if (!q) return list;
+    return list.filter(a =>
+      (a.name||'').toLowerCase().includes(q) ||
+      (a.tag||'').toLowerCase().includes(q)
+    );
+  }, [animals, search]);
 
   const handleSave = async () => {
     if (!form.animalId || !form.amount) return;
@@ -63,10 +75,41 @@ function MilkLogForm({ onClose }) {
       <div className="grid grid-cols-2 gap-4">
         <div className="col-span-2">
           <label className="form-label">Animal<span className="text-red-500">*</span></label>
-          <select className="form-input" value={form.animalId} onChange={e=>f('animalId',e.target.value)}>
+
+          {/* Search box ABOVE the dropdown — filters the options below */}
+          <div className="relative mb-2">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+            <input
+              type="text"
+              className="form-input pl-8"
+              placeholder="Search cow by name or tag…"
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+
+          {/* Original dropdown — kept; fed the filtered list */}
+          <select
+            className="form-input"
+            value={form.animalId}
+            onChange={e=>f('animalId', e.target.value)}
+          >
             <option value="">Select cow…</option>
-            {animals?.map(a=><option key={a.id} value={a.id}>{a.name} {a.tag} {a.milkLock?'🔒':''}</option>)}
+            {filteredAnimals.map(a=>(
+              <option key={a.id} value={a.id}>
+                {a.name}{a.tag ? ` · ${a.tag}` : ''}{a.milkLock ? ' 🔒' : ''}
+              </option>
+            ))}
           </select>
+
+          {search && filteredAnimals.length === 0 && (
+            <p className="text-xs text-gray-400 mt-1">
+              {(!animals || animals.length===0)
+                ? 'No milking cows in the registry yet.'
+                : `No cows match “${search}”.`}
+            </p>
+          )}
         </div>
         <div>
           <label className="form-label">Date</label>
