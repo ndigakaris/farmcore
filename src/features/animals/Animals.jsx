@@ -151,12 +151,34 @@ function AnimalProfile({ animal, onClose }) {
   const allAnimals  = useLiveQuery(() => db.animals.toArray(), []);
   const treatments  = useLiveQuery(() => db.treatments.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const milkLogs    = useLiveQuery(() => db.milkLogs.where('animalId').equals(animal.id).reverse().limit(30).toArray(), [animal.id]);
+  const allMilkLogs = useLiveQuery(() => db.milkLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const weights     = useLiveQuery(() => db.weightLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const vaccins     = useLiveQuery(() => db.vaccinations.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const breeding    = useLiveQuery(() => db.breedingLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const offspring   = useMemo(() =>
     allAnimals?.filter(a => a.dam?.includes(animal.name) && a.species===animal.species && a.id!==animal.id) || [],
     [allAnimals, animal]);
+
+  // Milk totals for the tiles (Day / Week / Month / Year-to-date).
+  // Dates are stored as 'YYYY-MM-DD' strings, so string comparison is safe.
+  const milkTotals = useMemo(() => {
+    const logs = allMilkLogs || [];
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const weekAgo = new Date(now.getTime() - 6*86400000).toISOString().split('T')[0]; // last 7 days incl. today
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    const yearStart  = `${now.getFullYear()}-01-01`;
+    const sum = (from) => logs
+      .filter(l => l.date && l.date >= from)
+      .reduce((t,l) => t + (parseFloat(l.amount)||0), 0);
+    return {
+      day:   logs.filter(l=>l.date===today).reduce((t,l)=>t+(parseFloat(l.amount)||0),0),
+      week:  sum(weekAgo),
+      month: sum(monthStart),
+      year:  sum(yearStart),
+    };
+  }, [allMilkLogs]);
+  const fmtL = (n) => `${(Math.round(n*10)/10).toLocaleString()} L`;
 
   const TABS = [
     {id:'overview',label:'Overview'},{id:'health',label:'Health'},
@@ -226,6 +248,15 @@ function AnimalProfile({ animal, onClose }) {
       )}
       {tab === 'production' && (
         <div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            {[['Today', milkTotals.day],['This Week', milkTotals.week],
+              ['This Month', milkTotals.month],['Year to Date', milkTotals.year]].map(([label,val])=>(
+              <div key={label} className="bg-[#eef5dd] rounded-xl px-3 py-3 text-center">
+                <p className="text-[10px] font-semibold text-[#2D5016] uppercase tracking-wide">{label}</p>
+                <p className="text-lg font-bold text-[#1a3009] mt-0.5">{fmtL(val)}</p>
+              </div>
+            ))}
+          </div>
           {(milkLogs||[]).map(l=>(
             <div key={l.id} className="flex items-center justify-between py-2 border-b border-[#F5F0E8] text-sm">
               <span className="text-gray-500">{formatDate(l.date)} · {l.shift}</span>
