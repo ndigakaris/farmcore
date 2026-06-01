@@ -49,8 +49,31 @@ function AnimalForm({ initial = {}, onSave, onClose }) {
       lockExpiry: initial.lockExpiry || null,
       lockReason: initial.lockReason || ''
     };
-    if (initial.id) await db.animals.update(initial.id, record);
-    else            await db.animals.add(record);
+    if (initial.id) {
+      await db.animals.update(initial.id, record);
+    } else {
+      const newId = await db.animals.add(record);
+      // Born-on-farm animal with a known mother → auto-create a birth record
+      // so it appears under Reproduction → Births. Only on NEW animals, and
+      // only when a dam is set, so editing never duplicates a birth.
+      if (form.dam) {
+        try {
+          // The dam field stores "Name Tag" — resolve it back to the dam's id.
+          const dam = (animals || []).find(a => `${a.name} ${a.tag}` === form.dam);
+          await db.births.add({
+            damId: dam?.id || null,
+            date: form.dob || todayStr(),
+            calves: [{ animalId: newId, tag: form.tag, name: form.name, sex: form.sex }],
+            sireId: form.sire || null,
+            notes: `Auto-recorded from registry: ${form.name} (${form.tag})`,
+            syncStatus: 'pending', updatedAt: new Date()
+          });
+        } catch (e) {
+          // Birth logging is best-effort; never block the animal save.
+          console.warn('[Animals] auto-birth:', e.message);
+        }
+      }
+    }
     onSave?.();
     onClose();
   };
