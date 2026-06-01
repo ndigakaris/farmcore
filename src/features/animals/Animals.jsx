@@ -168,6 +168,10 @@ function AnimalProfile({ animal, onClose }) {
     const weekAgo = new Date(now.getTime() - 6*86400000).toISOString().split('T')[0]; // last 7 days incl. today
     const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
     const yearStart  = `${now.getFullYear()}-01-01`;
+    // Previous calendar month range: [lastMonthStart, monthStart)
+    const lmDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const lastMonthStart = `${lmDate.getFullYear()}-${String(lmDate.getMonth()+1).padStart(2,'0')}-01`;
+    const lastMonthLabel = lmDate.toLocaleString('en-US', { month: 'short' });
     const sum = (from) => logs
       .filter(l => l.date && l.date >= from)
       .reduce((t,l) => t + (parseFloat(l.amount)||0), 0);
@@ -175,6 +179,10 @@ function AnimalProfile({ animal, onClose }) {
       day:   logs.filter(l=>l.date===today).reduce((t,l)=>t+(parseFloat(l.amount)||0),0),
       week:  sum(weekAgo),
       month: sum(monthStart),
+      lastMonth: logs
+        .filter(l => l.date && l.date >= lastMonthStart && l.date < monthStart)
+        .reduce((t,l) => t + (parseFloat(l.amount)||0), 0),
+      lastMonthLabel,
       year:  sum(yearStart),
     };
   }, [allMilkLogs]);
@@ -248,9 +256,11 @@ function AnimalProfile({ animal, onClose }) {
       )}
       {tab === 'production' && (
         <div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
             {[['Today', milkTotals.day],['This Week', milkTotals.week],
-              ['This Month', milkTotals.month],['Year to Date', milkTotals.year]].map(([label,val])=>(
+              ['This Month', milkTotals.month],
+              [`Last Month (${milkTotals.lastMonthLabel})`, milkTotals.lastMonth],
+              ['Year to Date', milkTotals.year]].map(([label,val])=>(
               <div key={label} className="bg-[#eef5dd] rounded-xl px-3 py-3 text-center">
                 <p className="text-[10px] font-semibold text-[#2D5016] uppercase tracking-wide">{label}</p>
                 <p className="text-lg font-bold text-[#1a3009] mt-0.5">{fmtL(val)}</p>
