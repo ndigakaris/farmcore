@@ -38,7 +38,7 @@ const NAV = [
 
 export default function Sidebar({ active, onNav }) {
   const {
-    farmName, syncStatus, isOnline, unreadCount,
+    farmName, syncStatus, pendingCount, syncNow, isOnline, unreadCount,
     sidebarOpen, setSidebarOpen,
     mobileNavOpen, setMobileNavOpen,
   } = useApp();
@@ -123,9 +123,25 @@ export default function Sidebar({ active, onNav }) {
             )}
             <div className="flex items-center gap-2">
               {isOnline?<Wifi size={12} className="text-green-400"/>:<WifiOff size={12} className="text-red-400"/>}
-              <span className="text-xs text-white/70 flex-1 truncate">{sync.label}</span>
+              <span className="text-xs text-white/70 flex-1 truncate">
+                {sync.label}
+                {pendingCount > 0 && (
+                  <span className="text-white/45"> · {pendingCount} waiting</span>
+                )}
+              </span>
               <span style={{color:sync.color}} className="text-[10px]">●</span>
             </div>
+            {/* Manual retry — a farmer who has just walked into signal
+                shouldn't have to wait out the backoff timer. */}
+            {(pendingCount > 0 || syncStatus === 'error') && isOnline && (
+              <button
+                onClick={syncNow}
+                disabled={syncStatus === 'syncing'}
+                className="mt-1.5 w-full text-[10px] text-white/70 hover:text-white bg-white/10 hover:bg-white/15 rounded px-2 py-1 transition-colors disabled:opacity-50"
+              >
+                {syncStatus === 'syncing' ? 'Syncing…' : 'Sync now'}
+              </button>
+            )}
           </div>
         ) : (
           isOnline?<Wifi size={16} className="text-green-400"/>:<WifiOff size={16} className="text-red-400"/>

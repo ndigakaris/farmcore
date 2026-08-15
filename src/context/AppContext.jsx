@@ -1,7 +1,9 @@
 // src/context/AppContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from './AuthContext.jsx';
-import supabase    from '../services/supabase.js';
+import db from '../db/schema.js';
+import { onSyncChange, fullSync } from '../services/sync.js';
 
 const AppContext = createContext(null);
 
@@ -11,8 +13,13 @@ export function AppProvider({ children }) {
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isOnline,     setIsOnline]     = useState(navigator.onLine);
-  const [syncStatus,   setSyncStatus]   = useState('synced');
-  const [unreadCount,  setUnreadCount]  = useState(0);
+
+  // Real state from the sync engine, not a local guess. The previous
+  // version kept its own `syncStatus` that only ever flipped to 'offline'
+  // — so the sidebar showed "Synced" even while records were stuck in the
+  // queue, which is exactly the reassurance a farmer must not be given.
+  const [syncState, setSyncState] = useState({ status: 'idle', pending: 0, lastSync: null, error: null });
+  useEffect(() => onSyncChange(setSyncState), []);
 
   // TopBar state
   const [species,      setSpecies]      = useState('all');
@@ -43,7 +50,7 @@ export function AppProvider({ children }) {
   // ── Online/offline ────────────────────────────────────────
   useEffect(() => {
     const online  = () => setIsOnline(true);
-    const offline = () => { setIsOnline(false); setSyncStatus('offline'); };
+    const offline = () => setIsOnline(false);
     window.addEventListener('online',  online);
     window.addEventListener('offline', offline);
     return () => {
@@ -53,41 +60,34 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── Unread notifications ──────────────────────────────────
-  useEffect(() => {
-    if (!farm?.id) { setUnreadCount(0); return; }
+  // Counted from the local database, not over the network. The old
+  // version asked Supabase on every mount, so the badge was blank for
+  // any farmer working out of signal — the exact situation in which the
+  // app is supposed to keep working.
+  const liveUnread = useLiveQuery(
+    () => db.notifications.filter(n => !n.read && !n.deletedAt).count(),
+    [], 0
+  );
+  const [unreadOverride, setUnreadCount] = useState(null);
+  const unreadCount = unreadOverride ?? liveUnread ?? 0;
 
-    const fetchCount = async () => {
-      try {
-        const { count } = await supabase
-          .from('notifications')
-          .select('id', { count: 'exact', head: true })
-          .eq('farm_id', farm.id)
-          .eq('read', false);
-        setUnreadCount(count || 0);
-      } catch { setUnreadCount(0); }
-    };
+  // Reset the manual override whenever the live count moves.
+  useEffect(() => { setUnreadCount(null); }, [liveUnread]);
 
-    fetchCount();
-
-    const channel = supabase
-      .channel(`notifications:${farm.id}`)
-      .on('postgres_changes', {
-        event: 'INSERT', schema: 'public',
-        table: 'notifications',
-        filter: `farm_id=eq.${farm.id}`,
-      }, () => fetchCount())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [farm?.id]);
+  /** "Sync now" — used by the sidebar/topbar. */
+  const syncNow = () => fullSync(farm?.id);
 
   return (
     <AppContext.Provider value={{
       // Sidebar
       farmName, sidebarOpen, setSidebarOpen,
       mobileNavOpen, setMobileNavOpen,
-      // Network
-      isOnline, syncStatus, setSyncStatus,
+      // Network / sync
+      isOnline,
+      syncStatus: syncState.status,
+      syncState,
+      pendingCount: syncState.pending,
+      syncNow,
       // Notifications
       unreadCount, setUnreadCount,
       // TopBar

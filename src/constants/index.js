@@ -54,9 +54,15 @@ export const DIAGNOSES = {
 export const CURRENCIES = { KES: 'KES', USD: 'USD' };
 export const LANGUAGES  = { en: 'English', sw: 'Swahili' };
 
+// Mirrors the states emitted by services/sync.js. Every state the engine
+// can emit must appear here — an unmapped one falls back to "Synced",
+// which would tell a farmer their records are safe when they are not.
 export const SYNC_STATUS = {
+  idle:     { label: 'Not synced yet', color: '#94a3b8', dot: '⚪' },
+  syncing:  { label: 'Syncing…',       color: '#38bdf8', dot: '🔄' },
   synced:   { label: 'Synced',         color: '#4ade80', dot: '🟢' },
   pending:  { label: 'Pending Sync',   color: '#fbbf24', dot: '🟡' },
   offline:  { label: 'Offline',        color: '#ef4444', dot: '🔴' },
   conflict: { label: 'Conflicts',      color: '#f97316', dot: '⚠️' },
+  error:    { label: 'Sync problem',   color: '#f97316', dot: '⚠️' },
 };
