@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES, DIAGNOSES } from '../../constants/index.js';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable, SectionCard } from '../../components/UI.jsx';
@@ -21,38 +23,35 @@ function TreatmentForm({ onClose }) {
       (a.animalCode||'').toLowerCase().includes(animalSearch.toLowerCase())
     ), [animals, animalSearch]);
 
-  const selectedAnimal = animals?.find(a=>a.id===Number(form.animalId));
+  const selectedAnimal = animals?.find(a=>a.id===asId(form.animalId));
   const withdrawalEnd  = form.withdrawal > 0 ? offsetDate(parseInt(form.withdrawal)||0) : null;
   const diagnosesList  = selectedAnimal ? (DIAGNOSES[selectedAnimal.species]||[]) : [];
   const finalDiagnosis = form.diagnosis === 'Other' ? form.customDiagnosis : form.diagnosis;
 
   const handleSave = async () => {
     if (!form.animalId || !finalDiagnosis) return;
-    const animalId = Number(form.animalId);
-    await db.treatments.add({
+    const animalId = asId(form.animalId);
+    await create('treatments', {
       ...form,
       diagnosis: finalDiagnosis,
       animalId, cost: parseFloat(form.cost)||0,
       withdrawal: parseInt(form.withdrawal)||0,
       withdrawalEnd, status: 'Active',
-      syncStatus: 'pending', updatedAt: new Date()
     });
     // Auto-record treatment as expense in Finance
     if (parseFloat(form.cost) > 0) {
-      await db.transactions.add({
+      await create('transactions', {
         type: 'expense', category: 'Veterinary',
         description: `Treatment: ${finalDiagnosis} – ${selectedAnimal?.name} ${selectedAnimal?.tag}`,
         amount: parseFloat(form.cost)||0,
         date: form.date, species: selectedAnimal?.species || 'cattle',
         paymentMethod: 'Cash', source: 'health',
-        syncStatus: 'pending', updatedAt: new Date()
       });
     }
     if (parseInt(form.withdrawal) > 0 && selectedAnimal && ['cattle','goats'].includes(selectedAnimal.species)) {
-      await db.animals.update(animalId, {
+      await update('animals', animalId, {
         milkLock: true, lockExpiry: withdrawalEnd,
         lockReason: `${finalDiagnosis} – ${form.treatment}`,
-        syncStatus: 'pending', updatedAt: new Date()
       });
     }
     onClose();
@@ -155,7 +154,7 @@ function VaccinationForm({ onClose }) {
 
   const handleSave = async () => {
     if (!form.animalId || !form.vaccine) return;
-    await db.vaccinations.add({ ...form, animalId:Number(form.animalId), syncStatus:'pending', updatedAt:new Date() });
+    await create('vaccinations', { ...form, animalId: asId(form.animalId) });
     onClose();
   };
 

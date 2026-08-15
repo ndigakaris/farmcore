@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import db from '../../db/schema.js';
+import { create } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, SectionCard, PageHeader, DataTable, UnitSelector } from '../../components/UI.jsx';
 import { formatDate, offsetDate, todayStr } from '../../utils/index.js';
@@ -17,7 +19,7 @@ function MilkLogForm({ onClose }) {
   });
   const animals = useLiveQuery(() => db.animals.where('species').equals('cattle').and(a=>a.sex==='F').toArray(), []);
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
-  const selectedAnimal = animals?.find(a=>a.id===Number(form.animalId));
+  const selectedAnimal = animals?.find(a=>a.id===asId(form.animalId));
   const isLocked = selectedAnimal?.milkLock && form.status === 'Sold';
   const revenue = parseFloat(form.amount||0) * parseFloat(form.pricePerLiter||0);
 
@@ -38,24 +40,22 @@ function MilkLogForm({ onClose }) {
     if (isLocked) { alert('🔒 WITHDRAWAL LOCK: Cannot log this milk as Sold. Change status to "Used on Farm" or wait until lock expires.'); return; }
     const liters = parseFloat(form.amount)||0;
     const price  = parseFloat(form.pricePerLiter)||0;
-    await db.milkLogs.add({
+    await create('milkLogs', {
       ...form,
-      animalId: Number(form.animalId),
+      animalId: asId(form.animalId),
       amount: liters,
       pricePerLiter: price,
       revenue: liters * price,
       fat: parseFloat(form.fat)||null,
       protein: parseFloat(form.protein)||null,
       scc: parseInt(form.scc)||null,
-      syncStatus:'pending', updatedAt:new Date()
     });
     if (form.status === 'Sold' && liters > 0 && price > 0) {
-      await db.transactions.add({
+      await create('transactions', {
         type:'income', category:'Milk Sales',
         description:`Milk – ${selectedAnimal?.name} ${selectedAnimal?.tag} (${form.shift})`,
         amount: liters * price, date: form.date,
         species:'cattle', paymentMethod:'Mpesa', source:'production',
-        syncStatus:'pending', updatedAt:new Date()
       });
     }
     onClose();
@@ -169,7 +169,7 @@ function EggLogForm({ onClose }) {
 
   const handleSave = async () => {
     if (!form.flockId || !form.total) return;
-    await db.eggLogs.add({ ...form, flockId:Number(form.flockId), total:parseInt(form.total), cracked:parseInt(form.cracked)||0, gradeA:parseInt(form.gradeA)||0, gradeB:parseInt(form.gradeB)||0, feedIntake:parseFloat(form.feedIntake)||null, syncStatus:'pending', updatedAt:new Date() });
+    await create('eggLogs', { ...form, flockId:asId(form.flockId), total:parseInt(form.total), cracked:parseInt(form.cracked)||0, gradeA:parseInt(form.gradeA)||0, gradeB:parseInt(form.gradeB)||0, feedIntake:parseFloat(form.feedIntake)||null });
     onClose();
   };
 

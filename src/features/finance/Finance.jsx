@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import db from '../../db/schema.js';
+import { create } from '../../db/repo.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES } from '../../constants/index.js';
 import { Modal, KPICard, StatGrid, SectionCard, PageHeader, DataTable } from '../../components/UI.jsx';
@@ -18,7 +19,7 @@ function TransactionForm({ onClose, type = 'income' }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.amount || !form.category) return;
-    await db.transactions.add({ ...form, amount:parseFloat(form.amount), syncStatus:'pending', updatedAt:new Date() });
+    await create('transactions', { ...form, amount:parseFloat(form.amount) });
     onClose();
   };
   const cats = form.type==='income' ? INCOME_CATS : EXPENSE_CATS;

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr } from '../../utils/index.js';
@@ -20,7 +22,7 @@ function PlotForm({ onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.name) return;
-    await db.plots.add({ ...form, syncStatus:'pending', updatedAt:new Date() });
+    await create('plots', { ...form });
     onClose();
   };
   return (
@@ -70,7 +72,7 @@ function CropPlanForm({ plots, onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.plotId || !form.cropType) return;
-    await db.cropPlans.add({ ...form, plotId:Number(form.plotId), syncStatus:'pending', updatedAt:new Date() });
+    await create('cropPlans', { ...form, plotId: asId(form.plotId) });
     onClose();
   };
   return (

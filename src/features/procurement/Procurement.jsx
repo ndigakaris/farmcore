@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable, SectionCard } from '../../components/UI.jsx';
 import { formatDate, todayStr, offsetDate } from '../../utils/index.js';
@@ -16,7 +18,7 @@ function POForm({ suppliers, onClose }) {
   const handleSave = async () => {
     if (!form.supplierId || !items[0].name) return;
     const poNum = 'PO-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
-    await db.purchaseOrders.add({ ...form, supplierId:Number(form.supplierId), poNumber:poNum, items, totalCost:total, status:'pending', approvedBy:'', syncStatus:'pending', updatedAt:new Date() });
+    await create('purchaseOrders', { ...form, supplierId:asId(form.supplierId), poNumber:poNum, items, totalCost:total, status:'pending', approvedBy:'' });
     onClose();
   };
   return (
@@ -60,9 +62,9 @@ function SupplierForm({ initial={}, onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.name) return;
-    const rec = { ...form, syncStatus:'pending', updatedAt:new Date() };
-    if (initial.id) await db.suppliers.update(initial.id, rec);
-    else            await db.suppliers.add(rec);
+    const rec = { ...form };
+    if (initial.id) await update('suppliers', initial.id, rec);
+    else            await create('suppliers', rec);
     onClose();
   };
   return (
@@ -100,7 +102,7 @@ export default function Procurement() {
   const totalSpend   = (pos||[]).reduce((s,p)=>s+(p.totalCost||0),0);
 
   const approvePO = async (id) => {
-    await db.purchaseOrders.update(id, { status:'approved', approvedBy:'James Mwangi', updatedAt:new Date() });
+    await update('purchaseOrders', id, { status:'approved', approvedBy:'James Mwangi' });
   };
 
   const poCols = [

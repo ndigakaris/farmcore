@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES, STAGES } from '../../constants/index.js';
 import { Modal, SearchBar, DataTable, Badge, KPICard, StatGrid, PageHeader, EmptyState, Tabs, SectionCard } from '../../components/UI.jsx';
@@ -43,16 +44,15 @@ function AnimalForm({ initial = {}, onSave, onClose }) {
       ...form,
       animalCode,
       purchaseCost: parseFloat(form.purchaseCost) || 0,
-      syncStatus: 'pending', updatedAt: new Date(),
       stage: form.stage || (STAGES[form.species]?.[0] || ''),
       milkLock: initial.milkLock || false,
       lockExpiry: initial.lockExpiry || null,
       lockReason: initial.lockReason || ''
     };
     if (initial.id) {
-      await db.animals.update(initial.id, record);
+      await update('animals', initial.id, record);
     } else {
-      const newId = await db.animals.add(record);
+      const newId = await create('animals', record);
       // Born-on-farm animal with a known mother → auto-create a birth record
       // so it appears under Reproduction → Births. Only on NEW animals, and
       // only when a dam is set, so editing never duplicates a birth.
@@ -60,13 +60,12 @@ function AnimalForm({ initial = {}, onSave, onClose }) {
         try {
           // The dam field stores "Name Tag" — resolve it back to the dam's id.
           const dam = (animals || []).find(a => `${a.name} ${a.tag}` === form.dam);
-          await db.births.add({
+          await create('births', {
             damId: dam?.id || null,
             date: form.dob || todayStr(),
             calves: [{ animalId: newId, tag: form.tag, name: form.name, sex: form.sex }],
             sireId: form.sire || null,
             notes: `Auto-recorded from registry: ${form.name} (${form.tag})`,
-            syncStatus: 'pending', updatedAt: new Date()
           });
         } catch (e) {
           // Birth logging is best-effort; never block the animal save.

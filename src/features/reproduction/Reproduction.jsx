@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { SPECIES } from '../../constants/index.js';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr, offsetDate } from '../../utils/index.js';
@@ -14,8 +16,9 @@ function HeatForm({ onClose }) {
   const toggleSign = (s) => setForm(p=>({ ...p, signs: p.signs.includes(s)?p.signs.filter(x=>x!==s):[...p.signs,s] }));
   const handleSave = async () => {
     if (!form.animalId) return;
-    await db.heatLogs.add({ ...form, animalId:Number(form.animalId), syncStatus:'pending', updatedAt:new Date() });
-    await db.notifications.add({ type:'breeding', priority:'warning', title:'Heat Alert', body:`${animals?.find(a=>a.id===Number(form.animalId))?.name} is in heat. Optimal breeding window: 12–18 hours.`, read:false, timestamp:new Date() });
+    const animalId = asId(form.animalId);
+    await create('heatLogs', { ...form, animalId });
+    await create('notifications', { type:'breeding', priority:'warning', title:'Heat Alert', body:`${animals?.find(a=>a.id===animalId)?.name} is in heat. Optimal breeding window: 12–18 hours.`, read:false });
     onClose();
   };
   return (
@@ -65,31 +68,27 @@ function BreedingForm({ onClose }) {
     setSaving(true);
     try {
       const cost = parseFloat(form.cost)||0;
-      const animalId = Number(form.animalId);
+      const animalId = asId(form.animalId);
       const animal = animals?.find(a=>a.id===animalId);
 
-      await db.breedingLogs.add({
-        ...form, animalId, cost,
-        syncStatus:'pending', updatedAt:new Date()
-      });
+      await create('breedingLogs', { ...form, animalId, cost });
 
       // Schedule pregnancy check in 21 days
-      await db.calendarEvents.add({
+      await create('calendarEvents', {
         date: offsetDate(21), type:'reproduction',
         title: `PD Check – ${animal?.name}`,
         species:'cattle', relatedId: animalId,
-        priority:'warning', syncStatus:'pending'
+        priority:'warning',
       });
 
       // Auto-record cost as expense in Finance
       if (cost > 0) {
-        await db.transactions.add({
+        await create('transactions', {
           type:'expense', category:'Veterinary',
           description:`Breeding (${form.method}) – ${animal?.name} ${animal?.tag}`,
           amount: cost, date: form.date,
           species: animal?.species || 'cattle',
           paymentMethod:'Cash', source:'reproduction',
-          syncStatus:'pending', updatedAt:new Date()
         });
       }
 
@@ -143,11 +142,12 @@ function PDCheckForm({ onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.animalId) return;
-    await db.pregnancyChecks.add({ ...form, animalId:Number(form.animalId), syncStatus:'pending', updatedAt:new Date() });
+    const animalId = asId(form.animalId);
+    await create('pregnancyChecks', { ...form, animalId });
     if (form.result==='Confirmed' && form.expectedDue) {
-      const anm = animals?.find(a=>a.id===Number(form.animalId));
-      await db.calendarEvents.add({ date:form.expectedDue, type:'reproduction', title:`Expected calving – ${anm?.name}`, species:'cattle', relatedId:Number(form.animalId), priority:'high', syncStatus:'pending' });
-      await db.animals.update(Number(form.animalId), { stage:'Dry Cow', syncStatus:'pending', updatedAt:new Date() });
+      const anm = animals?.find(a=>a.id===animalId);
+      await create('calendarEvents', { date:form.expectedDue, type:'reproduction', title:`Expected calving – ${anm?.name}`, species:'cattle', relatedId:animalId, priority:'high' });
+      await update('animals', animalId, { stage:'Dry Cow' });
     }
     onClose();
   };

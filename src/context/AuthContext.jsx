@@ -7,7 +7,8 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../services/supabase.js';
-import { initialPull, startBackgroundSync, stopBackgroundSync } from '../services/sync.js';
+import { initialPull, startBackgroundSync, stopBackgroundSync, onSyncChange } from '../services/sync.js';
+import { setActiveFarm } from '../db/repo.js';
 
 const AuthContext = createContext(null);
 
@@ -45,7 +46,12 @@ export function AuthProvider({ children }) {
   const [farm,       setFarm]       = useState(() => readFarmCache()?.farm || null);
   const [farmUser,   setFarmUser]   = useState(() => readFarmCache()?.farmUser || null);
   const [loading,    setLoading]    = useState(true);
-  const [syncStatus, setSyncStatus] = useState('synced');
+  // Mirrors the sync engine's real state (idle / syncing / pending / synced /
+  // offline / error) plus how many records are still queued, so the UI can
+  // tell a farmer the truth instead of showing a permanent green tick.
+  const [syncState,  setSyncState]  = useState({ status: 'idle', pending: 0, lastSync: null, error: null });
+
+  useEffect(() => onSyncChange(setSyncState), []);
 
   // farmResolved: have we DEFINITIVELY determined the user's farm membership?
   //   false  → still loading, or the lookup errored (do NOT show onboarding)
@@ -105,10 +111,14 @@ export function AuthProvider({ children }) {
       setFarmResolved(true);
       writeFarmCache(userId, fu.farms, fu);   // remember for instant reloads
 
+      // Every record written from now on is stamped with this farm. Must be
+      // set BEFORE any sync runs, or pulled rows land unscoped.
+      setActiveFarm(fu.farm_id);
+
       // Kick off background sync — non-blocking, done well after loading flips
       setTimeout(() => {
         initialPull(fu.farm_id).catch(() => {}).finally(() => {
-          startBackgroundSync(fu.farm_id, () => setSyncStatus('synced'));
+          startBackgroundSync(fu.farm_id);
         });
       }, 1000);
     } catch (err) {
@@ -199,6 +209,7 @@ export function AuthProvider({ children }) {
           setFarmResolved(false); setFarmError(null);
           clearFarmCache();
           stopBackgroundSync();
+          setActiveFarm(null);
           setLoading(false);
         }
       }
@@ -267,7 +278,8 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, profile, farm, farmUser,
-      loading, syncStatus,
+      loading,
+      syncState, syncStatus: syncState.status,
       farmResolved, farmError,
       signUp, signIn, signOut,
       createFarm, refreshFarm,

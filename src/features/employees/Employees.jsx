@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr, getInitials } from '../../utils/index.js';
@@ -17,10 +18,9 @@ function EmployeeForm({ initial={}, onClose }) {
   const handleSave = async () => {
     if (!form.name) return;
     const rec = { ...form, salary:parseFloat(form.salary)||0,
-      status: form.resignationDate ? 'resigned' : (form.status||'active'),
-      syncStatus:'pending', updatedAt:new Date() };
-    if (initial.id) await db.employees.update(initial.id, rec);
-    else            await db.employees.add(rec);
+      status: form.resignationDate ? 'resigned' : (form.status||'active') };
+    if (initial.id) await update('employees', initial.id, rec);
+    else            await create('employees', rec);
     onClose();
   };
   return (
@@ -70,9 +70,9 @@ function AttendanceForm({ onClose }) {
     const existMap = {};
     existing.forEach(a=>{ existMap[a.employeeId]=a; });
     for (const e of active) {
-      const rec = { employeeId:e.id, date, status:records[e.id]||'present', notes:notes[e.id]||'', syncStatus:'pending', updatedAt:new Date() };
-      if (existMap[e.id]) await db.attendance.update(existMap[e.id].id, rec);
-      else                await db.attendance.add(rec);
+      const rec = { employeeId:e.id, date, status:records[e.id]||'present', notes:notes[e.id]||'' };
+      if (existMap[e.id]) await update('attendance', existMap[e.id].id, rec);
+      else                await create('attendance', rec);
     }
     onClose();
   };
@@ -139,16 +139,16 @@ function PayrollForm({ onClose }) {
       const existing = await db.payroll.where('month').equals(month).toArray();
       const existMap = {}; existing.forEach(p=>{ existMap[p.employeeId]=p; });
       for (const { e, basic, nssf, nhif, net } of rows) {
-        const rec = { employeeId:e.id, month, basic, nssf, nhif, net, status:'pending', syncStatus:'pending', updatedAt:new Date() };
-        if (existMap[e.id]) await db.payroll.update(existMap[e.id].id, rec);
+        const rec = { employeeId:e.id, month, basic, nssf, nhif, net, status:'pending' };
+        if (existMap[e.id]) await update('payroll', existMap[e.id].id, rec);
         else {
-          await db.payroll.add(rec);
-          await db.transactions.add({
+          await create('payroll', rec);
+          await create('transactions', {
             type:'expense', category:'Labour',
             description:`Payroll ${month} – ${e.name}`,
             amount: net, date: month+'-28',
             species:'overhead', paymentMethod:'Bank Transfer',
-            source:'payroll', syncStatus:'pending', updatedAt:new Date()
+            source:'payroll',
           });
         }
       }

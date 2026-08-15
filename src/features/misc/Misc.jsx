@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { SPECIES } from '../../constants/index.js';
 import { Modal, PageHeader, DataTable, KPICard, StatGrid } from '../../components/UI.jsx';
 import { formatDate, todayStr } from '../../utils/index.js';
@@ -13,7 +15,7 @@ function LabForm({ onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.testType || !form.result) return;
-    await db.labTests.add({ ...form, animalId:Number(form.animalId)||null, syncStatus:'pending' });
+    await create('labTests', { ...form, animalId: asId(form.animalId) });
     onClose();
   };
   const TEST_TYPES = ['Milk Quality (Fat/Protein/SCC)','CMT (Mastitis Screening)','Water Quality','Aflatoxin Screen','Brucellosis Test','BVD Test','Blood Count','Feed Analysis','Soil Test'];
@@ -112,14 +114,27 @@ export function Reports() {
 // Notifications module
 export function Notifications() {
   const { setUnreadCount } = useApp();
-  const notifications = useLiveQuery(() => db.notifications.orderBy('timestamp').reverse().toArray(), []);
+  // Ordered by createdAt: the local `timestamp` field never existed on the
+  // server copy (Postgres calls it created_at), so pulled notifications
+  // sorted as undefined and jumped to the end of the list.
+  const notifications = useLiveQuery(
+    () => db.notifications.orderBy('createdAt').reverse().toArray(), []);
+
+  // Booleans are not valid IndexedDB keys, so the old
+  // `.where('read').equals(0)` never matched a record stored as
+  // `read:false` — the unread badge was permanently stuck.
+  const unread = async () =>
+    (await db.notifications.filter(n => !n.read && !n.deletedAt).count());
+
   const markRead = async (id) => {
-    await db.notifications.update(id, { read: true });
-    const count = await db.notifications.where('read').equals(0).count();
-    setUnreadCount(count);
+    await update('notifications', id, { read: true });
+    setUnreadCount(await unread());
   };
   const markAllRead = async () => {
-    await db.notifications.toCollection().modify({ read: true });
+    const ids = (await db.notifications.filter(n => !n.read).toArray()).map(n => n.id);
+    // Go through the repo so each row is flagged pending and the "read"
+    // state actually follows the user to their other devices.
+    await Promise.all(ids.map(id => update('notifications', id, { read: true })));
     setUnreadCount(0);
   };
   const PRIORITY_COLORS = { urgent:'border-l-red-500 bg-red-50', warning:'border-l-amber-400 bg-amber-50', info:'border-l-blue-400 bg-blue-50' };

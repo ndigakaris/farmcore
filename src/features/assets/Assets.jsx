@@ -2,6 +2,8 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
+import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr, daysFromNow } from '../../utils/index.js';
@@ -12,9 +14,9 @@ function AssetForm({ initial={}, onClose }) {
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const handleSave = async () => {
     if (!form.name) return;
-    const rec = { ...form, purchaseCost:parseFloat(form.purchaseCost)||0, syncStatus:'pending', updatedAt:new Date() };
-    if (initial.id) await db.assets.update(initial.id, rec);
-    else            await db.assets.add(rec);
+    const rec = { ...form, purchaseCost:parseFloat(form.purchaseCost)||0 };
+    if (initial.id) await update('assets', initial.id, rec);
+    else            await create('assets', rec);
     onClose();
   };
   return (
@@ -62,35 +64,33 @@ function MaintenanceForm({ onClose }) {
       (a.make||'').toLowerCase().includes(search.toLowerCase())
     ),[assets,search]);
 
-  const selectedAsset = (assets||[]).find(a=>a.id===Number(form.assetId));
+  const selectedAsset = (assets||[]).find(a=>a.id===asId(form.assetId));
 
   const handleSave = async () => {
     if (!form.assetId || !form.workDone) return;
     setSaving(true);
     try {
-      await db.maintenance.add({
+      const assetId = asId(form.assetId);
+      await create('maintenance', {
         ...form,
-        assetId: Number(form.assetId),
+        assetId,
         cost: parseFloat(form.cost)||0,
         downtimeHours: parseFloat(form.downtimeHours)||0,
-        syncStatus:'pending', updatedAt:new Date()
       });
       // Update asset's next service date and condition
       if (form.nextService || form.cost > 0) {
-        await db.assets.update(Number(form.assetId), {
+        await update('assets', assetId, {
           ...(form.nextService ? { nextService: form.nextService } : {}),
-          syncStatus:'pending', updatedAt:new Date()
         });
       }
       // Auto-record as Equipment Maintenance expense in Finance
       if (parseFloat(form.cost) > 0) {
-        await db.transactions.add({
+        await create('transactions', {
           type:'expense', category:'Equipment Maintenance',
           description:`Maintenance: ${selectedAsset?.name} – ${form.workDone}`,
           amount: parseFloat(form.cost),
           date: form.date, species:'overhead',
           paymentMethod:'Cash', source:'maintenance',
-          syncStatus:'pending', updatedAt:new Date()
         });
       }
       onClose();

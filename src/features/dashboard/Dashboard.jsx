@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import db from '../../db/schema.js';
+import { generateFarmBrief } from '../../services/api.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { SPECIES } from '../../constants/index.js';
@@ -69,25 +70,16 @@ Keep it concise. No bullet points. End with an encouraging line.`;
     }
     setLoading(true); setError('');
     try {
-      const res = await fetch('/api/farm-brief', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: buildPrompt() }),
-      });
-      // Guard: response might be HTML (404 page) not JSON
-      const contentType = res.headers.get('content-type')||'';
-      if (!contentType.includes('application/json')) {
-        throw new Error('API route not available. Deploy to Vercel to activate AI brief.');
-      }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error||'Server error');
+      // farmId is required: the endpoint checks the caller is a member of
+      // that farm before spending a request on the metered AI service.
+      const data = await generateFarmBrief({ prompt: buildPrompt(), farmId: farm.id });
       setBrief(data.brief||'');
       setLastFetch(new Date());
       setFetched(true);
     } catch(err) {
       setError(err.message);
     } finally { setLoading(false); }
-  }, [buildPrompt]);
+  }, [buildPrompt, farm?.id]);
 
   // Auto-fetch once animals data is ready, but only once per session
   useEffect(()=>{
@@ -198,7 +190,9 @@ function SmartTip({ animals, milkLogs, feedInventory, notifications }) {
         const last3  = sorted.slice(0,3).reduce((s,l)=>s+l.amount,0)/3;
         const prev7  = sorted.slice(3,10).reduce((s,l)=>s+l.amount,0)/Math.max(sorted.slice(3,10).length,1);
         if (prev7 > 0 && (prev7-last3)/prev7 > 0.15) {
-          const animal = animals?.find(a=>a.id===Number(id));
+          // Object.entries() stringifies the key; ids are strings now, so
+          // compare directly rather than coercing to a number.
+          const animal = animals?.find(a=>String(a.id)===id);
           if (animal) results.push(`🔴 ${animal.name} yield dropped ${Math.round((prev7-last3)/prev7*100)}% vs 7-day average — check health.`);
         }
       }

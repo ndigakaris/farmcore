@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
+import { create, update } from '../../db/repo.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES } from '../../constants/index.js';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable, UnitSelector } from '../../components/UI.jsx';
@@ -25,9 +26,8 @@ function StockUpdateModal({ feed, onClose }) {
     const newQty = action === 'add'
       ? feed.quantity + amount
       : Math.max(0, feed.quantity - amount);
-    await db.feedInventory.update(feed.id, {
+    await update('feedInventory', feed.id, {
       quantity: newQty, lastRestocked: todayStr(),
-      syncStatus: 'pending', updatedAt: new Date()
     });
     onClose();
   };
@@ -103,10 +103,10 @@ function FeedForm({ initial = {}, onClose }) {
       quantity: parseFloat(form.quantity)||0,
       minStock: parseFloat(form.minStock)||0,
       costPerUnit: parseFloat(form.costPerUnit)||0,
-      lastRestocked: todayStr(), syncStatus:'pending', updatedAt:new Date()
+      lastRestocked: todayStr(),
     };
-    if (initial.id) await db.feedInventory.update(initial.id, rec);
-    else            await db.feedInventory.add(rec);
+    if (initial.id) await update('feedInventory', initial.id, rec);
+    else            await create('feedInventory', rec);
     onClose();
   };
 

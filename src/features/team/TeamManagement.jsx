@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import supabase from '../../services/supabase.js';
+import { createFarmUser, resetMemberPassword } from '../../services/api.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Modal, KPICard, StatGrid } from '../../components/UI.jsx';
 import { formatDate, getInitials, cn } from '../../utils/index.js';
@@ -215,15 +216,13 @@ function MemberModal({ farmId, member, customRoles, nextCode, currentUserId, onC
           setError('Creating brand-new accounts only works on the deployed (Vercel) site. On localhost, add someone who already has a FarmCore account.');
           return;
         }
-        const res = await fetch('/api/create-user', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: form.email.trim(), password: form.password, fullName: form.fullName,
-            farmId, role: form.role, invitedBy: currentUserId, userCode: code,
-          }),
+        // createFarmUser attaches the caller's session token — the endpoint
+        // rejects the request without it, and derives invited_by from the
+        // verified caller rather than trusting the body.
+        await createFarmUser({
+          email: form.email.trim(), password: form.password, fullName: form.fullName,
+          farmId, role: form.role, userCode: code,
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to create the account');
         // Show the credentials so the admin can share them.
         setCreated({ email: form.email.trim(), password: form.password });
         onSaved();
@@ -240,12 +239,7 @@ function MemberModal({ farmId, member, customRoles, nextCode, currentUserId, onC
     if (isLocalhost()) { setError('Password reset only works on the deployed (Vercel) site.'); return; }
     setSaving(true); setError('');
     try {
-      const res = await fetch('/api/reset-member-password', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: member.user_id, password: resetPw, farmId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to reset password');
+      await resetMemberPassword({ userId: member.user_id, password: resetPw, farmId });
       setResetDone(true);
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
