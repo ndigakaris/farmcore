@@ -5,7 +5,7 @@ import { create, update } from '../../db/repo.js';
 import { asId } from '../../db/ids.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable, SectionCard } from '../../components/UI.jsx';
-import { formatDate, todayStr, offsetDate } from '../../utils/index.js';
+import { formatDate, todayStr } from '../../utils/index.js';
 import { Plus, Package, CheckCircle } from 'lucide-react';
 
 function POForm({ suppliers, onClose }) {
@@ -17,7 +17,20 @@ function POForm({ suppliers, onClose }) {
   const total    = items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.unitCost)||0),0);
   const handleSave = async () => {
     if (!form.supplierId || !items[0].name) return;
-    const poNum = 'PO-'+new Date().getFullYear()+'-'+String(Math.floor(Math.random()*900)+100);
+    // Sequential per year. The previous version picked a random 3-digit
+    // suffix, which collides roughly one time in nine once a farm has
+    // ~40 orders in a year — two different orders sharing a PO number is
+    // an audit problem, not a cosmetic one.
+    const year   = new Date().getFullYear();
+    const prefix = `PO-${year}-`;
+    const existing = await db.purchaseOrders
+      .filter(p => typeof p.poNumber === 'string' && p.poNumber.startsWith(prefix))
+      .toArray();
+    const highest = existing.reduce((max, p) => {
+      const n = parseInt(String(p.poNumber).slice(prefix.length), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 100);
+    const poNum = prefix + String(highest + 1).padStart(3, '0');
     await create('purchaseOrders', { ...form, supplierId:asId(form.supplierId), poNumber:poNum, items, totalCost:total, status:'pending', approvedBy:'' });
     onClose();
   };

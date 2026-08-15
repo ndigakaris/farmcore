@@ -42,7 +42,7 @@ export async function postJson(path, body = {}, { timeoutMs = 30_000 } = {}) {
     return data;
   } catch (err) {
     if (err.name === 'AbortError') {
-      throw new Error('The request timed out. Check your connection and try again.');
+      throw new Error('The request timed out. Check your connection and try again.', { cause: err });
     }
     throw err;
   } finally {

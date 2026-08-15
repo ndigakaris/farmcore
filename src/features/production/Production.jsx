@@ -197,7 +197,7 @@ function EggLogForm({ onClose }) {
 }
 
 export default function Production() {
-  const { species, formatCurrency } = useApp();
+  const { formatCurrency } = useApp();
   const [activeTab, setActiveTab] = useState('milk');
   const [showForm, setShowForm] = useState(false);
   const today = todayStr();
