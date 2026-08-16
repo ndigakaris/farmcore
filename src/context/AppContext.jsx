@@ -4,6 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from './AuthContext.jsx';
 import db from '../db/schema.js';
 import { onSyncChange, fullSync } from '../services/sync.js';
+import { permissionsFor } from '../constants/permissions.js';
 
 const AppContext = createContext(null);
 
@@ -38,11 +39,18 @@ export function AppProvider({ children }) {
     ? farm.active_species
     : ['cattle', 'pigs', 'goats', 'sheep', 'poultry'];
 
-  // currentUser — name and role for TopBar avatar
+  // currentUser — name and role for TopBar avatar.
+  // Note: no `|| 'owner'` fallback. Defaulting an unknown role to owner
+  // meant that during the auth round-trip every user briefly saw the
+  // full owner interface, including controls the database would refuse.
   const currentUser = {
     name: profile?.full_name || user?.user_metadata?.full_name || user?.email || 'User',
-    role: farmUser?.role || 'owner',
+    role: farmUser?.role || null,
   };
+
+  // Capability flags mirroring the RLS tiers. The server still decides;
+  // this only stops the UI offering actions that will be refused.
+  const permissions = permissionsFor(farmUser?.role);
 
   // farmName for Sidebar
   const farmName = farm?.name || 'FarmCore';
@@ -96,6 +104,7 @@ export function AppProvider({ children }) {
       theme, setTheme,
       activeSpecies,
       currentUser,
+      permissions,
       formatCurrency,
     }}>
       {children}

@@ -87,7 +87,14 @@ export const SYNCED_TABLES = [
  */
 export const LOCAL_ONLY_TABLES = [
   { local: 'settings', indexes: 'key' },
-  { local: 'syncQueue', indexes: 'table, recordId, attempts, createdAt' },
+
+  // Outbox for deletions. A deleted row is removed from its own table
+  // straight away — so it disappears from the UI the instant the user
+  // deletes it — and a note is left here for the sync engine to push.
+  // Keeping the tombstone OUT of the data tables is what lets every
+  // existing `db.animals.toArray()` style query stay correct: there is
+  // no soft-deleted row for them to accidentally display.
+  { local: 'tombstones', indexes: 'table, recordId, attempts, createdAt' },
 ];
 
 /** Columns every synced table carries. Kept in one place so the Dexie

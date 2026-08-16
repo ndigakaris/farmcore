@@ -19,6 +19,7 @@
 import supabase from './supabase.js';
 import db from '../db/schema.js';
 import { SYNCED_TABLES } from '../db/tables.js';
+import { onFarmChanged } from '../db/repo.js';
 
 // PostgREST caps a select at 1000 rows unless you page. A 200-cow dairy
 // generates ~146k milk logs a year, so the old un-paged select was
@@ -94,7 +95,7 @@ function emit(patch) {
   for (const fn of listeners) { try { fn(state); } catch { /* listener threw — ignore */ } }
 }
 
-/** Number of rows still waiting to reach the cloud. */
+/** Number of changes still waiting to reach the cloud, deletions included. */
 export async function pendingCount() {
   let n = 0;
   for (const { local } of SYNCED_TABLES) {
@@ -103,6 +104,7 @@ export async function pendingCount() {
     try { n += await t.where('syncStatus').equals('pending').count(); }
     catch { /* table missing during an upgrade */ }
   }
+  try { n += await db.tombstones.count(); } catch { /* noop */ }
   return n;
 }
 
@@ -162,13 +164,6 @@ export async function pushPending(farmId) {
 
       await Promise.all(batch.map(async (r) => {
         const server = serverById[r.id];
-
-        if (r.deletedAt) {
-          // Server has the tombstone; the device no longer needs the row.
-          await t.delete(r.id).catch(() => {});
-          return;
-        }
-
         await t.update(r.id, {
           syncStatus: 'synced',
           syncError: null,
@@ -177,6 +172,67 @@ export async function pushPending(farmId) {
         }).catch(() => {});
       }));
 
+      pushed += batch.length;
+    }
+  }
+
+  const del = await pushTombstones(farmId);
+  return { pushed: pushed + del.pushed, failed: failed + del.failed };
+}
+
+// ── PUSH DELETIONS ────────────────────────────────────────────
+/**
+ * Drain the tombstone outbox.
+ *
+ * The row is already gone from the device (repo.remove deletes it on the
+ * spot so the UI never shows a record the user just deleted). What is
+ * left here is the instruction to mark it deleted in Postgres, which is
+ * what stops the next pull downloading it again.
+ */
+export async function pushTombstones(farmId) {
+  const outbox = db.tombstones;
+  if (!outbox) return { pushed: 0, failed: 0 };
+
+  let pending;
+  try { pending = await outbox.toArray(); } catch { return { pushed: 0, failed: 0 }; }
+  if (!pending.length) return { pushed: 0, failed: 0 };
+
+  // Group by remote table so each one is a single request.
+  const byTable = new Map();
+  for (const t of pending) {
+    const mapping = SYNCED_TABLES.find((m) => m.local === t.table);
+    if (!mapping) { await outbox.delete(t.id).catch(() => {}); continue; }
+    if (!byTable.has(mapping.remote)) byTable.set(mapping.remote, []);
+    byTable.get(mapping.remote).push(t);
+  }
+
+  let pushed = 0;
+  let failed = 0;
+
+  for (const [remote, items] of byTable) {
+    for (let i = 0; i < items.length; i += PUSH_CHUNK) {
+      const batch = items.slice(i, i + PUSH_CHUNK);
+      const rows = batch.map((t) => ({
+        id: t.recordId,
+        farm_id: t.farmId || farmId,
+        deleted_at: t.deletedAt,
+      }));
+
+      const { error } = await supabase.from(remote).upsert(rows, { onConflict: 'id' });
+
+      if (error) {
+        failed += batch.length;
+        await Promise.all(batch.map((t) =>
+          outbox.update(t.id, {
+            attempts: (t.attempts || 0) + 1,
+            error: error.message,
+          }).catch(() => {})
+        ));
+        console.warn(`[sync] delete ${remote} failed:`, error.message);
+        continue;
+      }
+
+      await Promise.all(batch.map((t) => outbox.delete(t.id).catch(() => {})));
       pushed += batch.length;
     }
   }

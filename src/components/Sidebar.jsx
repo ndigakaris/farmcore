@@ -41,9 +41,15 @@ export default function Sidebar({ active, onNav }) {
     farmName, syncStatus, pendingCount, syncNow, isOnline, unreadCount,
     sidebarOpen, setSidebarOpen,
     mobileNavOpen, setMobileNavOpen,
+    permissions,
   } = useApp();
   const { farm, farmUser, signOut } = useAuth();
   const sync = SYNC_STATUS[syncStatus] || SYNC_STATUS.synced;
+
+  // Drop pages this role cannot open, then drop any section left empty.
+  const visibleNav = NAV
+    .map(s => ({ ...s, items: s.items.filter(i => permissions.canSeePage(i.id)) }))
+    .filter(s => s.items.length > 0);
 
   // On mobile the drawer is always full-label width; the collapse toggle
   // only applies to the static desktop (lg+) sidebar.
@@ -83,9 +89,11 @@ export default function Sidebar({ active, onNav }) {
         </button>
       </div>
 
-      {/* Nav */}
+      {/* Nav — filtered to what this role can actually open. Finance,
+          Employees and Reports read tables that RLS hides from workers
+          and vets, so leaving them in the menu only led to blank pages. */}
       <div className="flex-1 overflow-y-auto py-2">
-        {NAV.map(section => (
+        {visibleNav.map(section => (
           <div key={section.section}>
             {expanded && (
               <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest px-4 pt-3 pb-1">

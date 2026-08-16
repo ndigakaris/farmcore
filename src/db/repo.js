@@ -14,7 +14,7 @@
 
 import db from './schema.js';
 import { newId } from './ids.js';
-import { isSyncedTable } from './tables.js';
+import { isSyncedTable, SYNCED_TABLES } from './tables.js';
 
 // ── Active farm ───────────────────────────────────────────────
 // Records are stamped with the farm they belong to so a manager who
@@ -26,12 +26,47 @@ const FARM_KEY = 'farmcore_active_farm';
 let activeFarmId = null;
 try { activeFarmId = localStorage.getItem(FARM_KEY) || null; } catch { /* private mode */ }
 
-export function setActiveFarm(farmId) {
-  activeFarmId = farmId || null;
+/**
+ * Point the app at a farm.
+ *
+ * Switching to a DIFFERENT farm wipes the local cache first. Without
+ * that, one farm's animals, ledger and payroll stay in IndexedDB and mix
+ * into the next farm's dashboard totals — a manager who looks after two
+ * farms would see one farm's milk counted against the other's.
+ *
+ * Returns a promise so callers can await the wipe before syncing.
+ */
+export async function setActiveFarm(farmId) {
+  const next = farmId || null;
+  const previous = activeFarmId;
+
+  activeFarmId = next;
   try {
-    if (farmId) localStorage.setItem(FARM_KEY, farmId);
+    if (next) localStorage.setItem(FARM_KEY, next);
     else localStorage.removeItem(FARM_KEY);
   } catch { /* storage unavailable — in-memory value still works */ }
+
+  // Sign-out (next === null) keeps the cache: the same user signing back
+  // in should not have to re-download everything, and anything still
+  // pending must survive to be pushed.
+  if (next && previous && previous !== next) {
+    await clearLocalData();
+    onFarmChanged.forEach((fn) => { try { fn(previous, next); } catch { /* noop */ } });
+  }
+}
+
+/** Subscribers notified after a farm switch has wiped the cache. The sync
+ *  engine uses this to drop its high-water marks, so the new farm does a
+ *  full pull instead of resuming the old farm's position. */
+export const onFarmChanged = new Set();
+
+/** Drop every synced table. Used when changing farms. */
+export async function clearLocalData() {
+  const tables = SYNCED_TABLES.map((t) => db[t.local]).filter(Boolean);
+  await db.transaction('rw', [...tables, db.tombstones], async () => {
+    await Promise.all(tables.map((t) => t.clear()));
+    await db.tombstones.clear();
+  });
 }
 
 export const getActiveFarm = () => activeFarmId;
@@ -115,36 +150,60 @@ export async function upsert(name, data = {}) {
 
 // ── DELETE ────────────────────────────────────────────────────
 /**
- * Soft-delete (tombstone).
+ * Delete a record and queue the deletion for the cloud.
  *
- * A hard delete cannot be synced: the row simply vanishes locally and
- * the next pull happily downloads it again from Postgres, so deletions
- * used to "come back from the dead". Marking `deletedAt` lets the
- * deletion itself be pushed, after which the tombstone is reaped.
+ * A plain local delete cannot be synced — the row vanishes here and the
+ * next pull cheerfully downloads it again from Postgres, so deletions
+ * "come back from the dead". So we do both: drop the row from its table
+ * immediately (the UI must never show something the user just deleted,
+ * even while offline for a week) and leave a note in the `tombstones`
+ * outbox for the sync engine to push.
  */
 export async function remove(name, id) {
+  const recordId = String(id);
+
   if (!isSyncedTable(name)) {
-    await table(name).delete(String(id));
+    await table(name).delete(recordId);
     return;
   }
-  await table(name).update(String(id), {
-    deletedAt: new Date().toISOString(),
-    syncStatus: 'pending',
-    updatedAt: new Date().toISOString(),
+
+  const row = await table(name).get(recordId);
+
+  await db.transaction('rw', table(name), db.tombstones, async () => {
+    await table(name).delete(recordId);
+
+    // A record that was never pushed has nothing to delete server-side,
+    // so skip the outbox entirely rather than sending a tombstone for a
+    // row Postgres has never seen.
+    if (row && row.syncStatus === 'synced') {
+      await db.tombstones.put({
+        id: newId(),
+        table: name,
+        recordId,
+        farmId: row.farmId ?? activeFarmId,
+        deletedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        attempts: 0,
+      });
+    }
   });
 }
 
-/** Permanently drop a row locally, bypassing the tombstone. Used by the
- *  sync engine to reap tombstones the server has confirmed. */
-export async function purge(name, id) {
-  await table(name).delete(String(id));
+/** Delete several records in one transaction. */
+export async function removeMany(name, ids = []) {
+  for (const id of ids) await remove(name, id);
 }
 
-// ── READ ──────────────────────────────────────────────────────
-// Reads must hide tombstones and other farms' rows. Feature code calls
-// these instead of db.<table>.toArray().
+/** Rows still waiting to have their deletion pushed. */
+export const pendingTombstones = () => db.tombstones.toArray();
 
-const visible = (r) => !r.deletedAt && (!activeFarmId || !r.farmId || r.farmId === activeFarmId);
+// ── READ ──────────────────────────────────────────────────────
+// Deleted rows are gone from their table outright (see remove() above),
+// so plain Dexie queries in feature code are already correct. These
+// helpers add farm scoping on top, for the case where one account
+// belongs to more than one farm.
+
+const visible = (r) => !activeFarmId || !r.farmId || r.farmId === activeFarmId;
 
 /** All live rows in a table, scoped to the active farm. */
 export async function all(name) {
@@ -172,8 +231,8 @@ export async function count(name) {
 export { visible as isVisible };
 
 export default {
-  setActiveFarm, getActiveFarm,
+  setActiveFarm, getActiveFarm, clearLocalData,
   create, createMany, update, upsert,
-  remove, purge,
+  remove, removeMany, pendingTombstones,
   all, byField, get, count,
 };

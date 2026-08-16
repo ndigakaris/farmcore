@@ -111,9 +111,10 @@ export function AuthProvider({ children }) {
       setFarmResolved(true);
       writeFarmCache(userId, fu.farms, fu);   // remember for instant reloads
 
-      // Every record written from now on is stamped with this farm. Must be
-      // set BEFORE any sync runs, or pulled rows land unscoped.
-      setActiveFarm(fu.farm_id);
+      // Every record written from now on is stamped with this farm. Must
+      // complete BEFORE any sync runs: switching farms clears the local
+      // cache, and a sync racing that wipe would re-download into it.
+      await setActiveFarm(fu.farm_id);
 
       // Kick off background sync — non-blocking, done well after loading flips
       setTimeout(() => {

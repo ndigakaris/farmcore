@@ -1,4 +1,16 @@
 node_modules/
 dist/
+dev-dist/
+
+# Secrets — .env alone did not cover .env.production, which is exactly
+# the file most likely to hold a real service-role key.
 .env
+.env.*
+!.env.example
 *.local
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

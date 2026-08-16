@@ -16,7 +16,9 @@ const ASSIGNABLE_ROLES = ['admin', 'manager', 'worker', 'vet', 'viewer'];
 export default async function handler(req, res) {
   if (!methodGuard(req, res, 'POST')) return;
 
-  const { email, password, fullName, farmId, role, invitedBy, userCode } = req.body || {};
+  // `invitedBy` is deliberately NOT read from the body — it is taken from
+  // the verified caller below so it cannot be forged.
+  const { email, password, fullName, farmId, role, userCode } = req.body || {};
 
   // ── Authorise BEFORE doing any work ──────────────────────────
   const auth = await requireFarmRole(req, farmId, ['owner', 'admin']);

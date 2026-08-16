@@ -3,6 +3,29 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  test: {
+    // Dexie needs a DOM + IndexedDB; the suite pulls in fake-indexeddb.
+    environment: 'jsdom',
+    include: ['src/**/*.test.{js,jsx}'],
+  },
+  build: {
+    // The app shipped as one 1.1 MB bundle. Splitting the heavy, rarely
+    // first-viewed vendor code keeps the initial download small, which
+    // matters a great deal on a rural 2G connection.
+    chunkSizeWarningLimit: 700,
+    rollupOptions: {
+      output: {
+        // Rolldown (Vite 8) accepts only the function form.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('recharts') || id.includes('d3-')) return 'charts';
+          if (id.includes('@supabase')) return 'supabase';
+          if (id.includes('dexie')) return 'db';
+          if (id.includes('react-dom') || id.includes('/react/')) return 'react';
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

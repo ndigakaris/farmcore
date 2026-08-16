@@ -28,12 +28,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ════════════════════════════════════════════════════════════
 -- 0. ENUMS (idempotent guards — v1 may already have created them)
 -- ════════════════════════════════════════════════════════════
-DO $$ BEGIN
-  CREATE TYPE sync_status AS ENUM ('synced','pending','conflict','error');
-EXCEPTION WHEN duplicate_object THEN
-  -- Existing installs are missing the 'error' member.
-  BEGIN ALTER TYPE sync_status ADD VALUE IF NOT EXISTS 'error'; EXCEPTION WHEN OTHERS THEN NULL; END;
-END $$;
+-- Note: sync_status is a purely client-side concept. The sync engine
+-- strips it before pushing, so the server copy only ever holds the
+-- default. We create the type if it is missing (fresh projects) but
+-- deliberately do NOT ALTER it — that would need to run outside this
+-- transaction, and nothing here depends on the extra member.
+DO $$ BEGIN CREATE TYPE sync_status AS ENUM ('synced','pending','conflict');
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN CREATE TYPE user_role AS ENUM ('owner','admin','manager','worker','vet','viewer');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -157,6 +158,24 @@ CREATE TABLE IF NOT EXISTS agrochemicals (
   deleted_at    TIMESTAMPTZ
 );
 
+-- Custom per-farm roles. Team Management reads and writes farm_roles in
+-- four places, but the table was never created — the "custom roles" tab
+-- failed with "relation does not exist" on every farm.
+CREATE TABLE IF NOT EXISTS farm_roles (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  farm_id     UUID NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT,
+  permissions JSONB DEFAULT '[]',
+  created_by  UUID REFERENCES auth.users(id),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(farm_id, name)          -- the UI already reports a duplicate-name error
+);
+
+-- (RLS policies and the updated_at trigger for farm_roles are applied in
+--  sections 4 and 6, once the helper functions exist.)
+
 -- ════════════════════════════════════════════════════════════
 -- 2. SCHEMA DRIFT — columns the app already writes
 -- ════════════════════════════════════════════════════════════
@@ -228,7 +247,7 @@ BEGIN
     'feed_inventory','feed_logs','feed_formulas','transactions','invoices',
     'employees','attendance','tasks','payroll','suppliers','purchase_orders',
     'grns','assets','maintenance','fuel_logs','plots','crop_plans','harvests',
-    'agrochemicals','notifications','calendar_events','audit_log'
+    'agrochemicals','notifications','calendar_events','audit_log','farm_roles'
   ] LOOP
     EXECUTE format('DROP TRIGGER IF EXISTS set_%s_updated_at ON %I', t, t);
     EXECUTE format(
@@ -315,11 +334,18 @@ BEGIN
     'feed_inventory','feed_logs','feed_formulas','transactions','invoices',
     'employees','attendance','tasks','payroll','suppliers','purchase_orders',
     'grns','assets','maintenance','fuel_logs','plots','crop_plans','harvests',
-    'agrochemicals','notifications','calendar_events','audit_log'
+    'agrochemicals','notifications','calendar_events','audit_log','farm_roles'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
   END LOOP;
 END $$;
+
+-- farm_roles — members read, management writes.
+DROP POLICY IF EXISTS "farm_roles_read"  ON farm_roles;
+DROP POLICY IF EXISTS "farm_roles_write" ON farm_roles;
+CREATE POLICY "farm_roles_read"  ON farm_roles FOR SELECT USING (can_read_farm(farm_id));
+CREATE POLICY "farm_roles_write" ON farm_roles FOR ALL
+  USING (can_manage_farm(farm_id)) WITH CHECK (can_manage_farm(farm_id));
 
 -- Operational tables — any non-viewer member may write.
 DO $$
