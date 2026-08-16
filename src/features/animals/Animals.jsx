@@ -5,7 +5,7 @@ import { create, update } from '../../db/repo.js';
 import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES, STAGES } from '../../constants/index.js';
 import { Modal, SearchBar, DataTable, Badge, KPICard, StatGrid, PageHeader, EmptyState, Tabs, SectionCard } from '../../components/UI.jsx';
-import { formatDate, daysOnFarm, speciesEmoji, todayStr, cn } from '../../utils/index.js';
+import { formatDate, daysOnFarm, todayStr } from '../../utils/index.js';
 import { Plus, Eye, AlertTriangle, Download } from 'lucide-react';
 
 // ── Species-based ID prefix ───────────────────────────────────
@@ -174,7 +174,6 @@ function AnimalProfile({ animal, onClose }) {
   const treatments  = useLiveQuery(() => db.treatments.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const milkLogs    = useLiveQuery(() => db.milkLogs.where('animalId').equals(animal.id).reverse().limit(30).toArray(), [animal.id]);
   const allMilkLogs = useLiveQuery(() => db.milkLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
-  const weights     = useLiveQuery(() => db.weightLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const vaccins     = useLiveQuery(() => db.vaccinations.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const breeding    = useLiveQuery(() => db.breedingLogs.where('animalId').equals(animal.id).toArray(), [animal.id]);
   const offspring   = useMemo(() =>

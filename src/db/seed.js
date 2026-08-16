@@ -1,4 +1,4 @@
-﻿// src/db/seed.js — DEMO DATA ONLY.
+// src/db/seed.js — DEMO DATA ONLY.
 //
 // Not wired into the app. Call it by hand from a dev console when you want
 // a populated screen for a demo or a screenshot.
@@ -51,7 +51,7 @@ export async function seedDemoData() {
     db.payroll, db.grns, db.settings,
   ], async () => {
 
-    // â”€â”€ SETTINGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── SETTINGS ──────────────────────────────────────────
     await bulkSeed(db.settings, [
       { key: 'farmName',   value: 'Kilima Fresh Farms' },
       { key: 'currency',   value: 'KES' },
@@ -62,10 +62,10 @@ export async function seedDemoData() {
       { key: 'currentUser', value: JSON.stringify({ name: 'James Mwangi', role: 'manager' }) },
     ]);
 
-    // â”€â”€ ANIMALS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const animals = await bulkSeed(db.animals, [
+    // ── ANIMALS ───────────────────────────────────────────
+    await bulkSeed(db.animals, [
       // CATTLE
-      { species:'cattle', name:'Daisy',  tag:'#045', breed:'Friesian', color:'Black & White', sex:'F', dob:'2020-03-12', stage:'Mature Cow',    pen:'Barn A', origin:'born',      dam:'Bella #012',  sire:'External AI', milkLock:true,  lockExpiry:d(6),  lockReason:'Mastitis â€“ Amoxicillin', notes:'High producer, prefers morning milking. Slightly nervous disposition.',         syncStatus:'synced', updatedAt:new Date() },
+      { species:'cattle', name:'Daisy',  tag:'#045', breed:'Friesian', color:'Black & White', sex:'F', dob:'2020-03-12', stage:'Mature Cow',    pen:'Barn A', origin:'born',      dam:'Bella #012',  sire:'External AI', milkLock:true,  lockExpiry:d(6),  lockReason:'Mastitis – Amoxicillin', notes:'High producer, prefers morning milking. Slightly nervous disposition.',         syncStatus:'synced', updatedAt:new Date() },
       { species:'cattle', name:'Bella',  tag:'#012', breed:'Jersey',   color:'Brown',         sex:'F', dob:'2018-07-04', stage:'Mature Cow',    pen:'Barn A', origin:'purchased', dam:'',            sire:'',            milkLock:false, lockExpiry:null,  lockReason:'',                          notes:'Dam to Daisy and Star. Oldest cow on farm.',                                  syncStatus:'synced', updatedAt:new Date() },
       { species:'cattle', name:'Star',   tag:'#067', breed:'Ayrshire', color:'Red & White',   sex:'F', dob:'2022-05-20', stage:'First Lactation', pen:'Barn B', origin:'born',   dam:'Bella #012',  sire:'External AI', milkLock:false, lockExpiry:null,  lockReason:'',                          notes:'First calf born Jan 2025. Good temperament.',                                 syncStatus:'synced', updatedAt:new Date() },
       { species:'cattle', name:'Luna',   tag:'#088', breed:'Friesian', color:'Black & White', sex:'F', dob:'2021-11-03', stage:'Mature Cow',    pen:'Barn B', origin:'purchased', dam:'',           sire:'',            milkLock:false, lockExpiry:null,  lockReason:'',                          notes:'Purchased from Eldoret. Excellent milk fat %.',                               syncStatus:'synced', updatedAt:new Date() },
@@ -99,7 +99,7 @@ export async function seedDemoData() {
     const allAnimals = await db.animals.toArray();
     allAnimals.forEach(a => { animalIds[a.tag] = a.id; });
 
-    // â”€â”€ MILK LOGS (30 days) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── MILK LOGS (30 days) ────────────────────────────────
     const cowTags = ['#045','#012','#067','#088'];
     const baseYields = { '#045':22,'#012':18,'#067':14,'#088':16 };
     const milkEntries = [];
@@ -117,7 +117,7 @@ export async function seedDemoData() {
     }
     await bulkSeed(db.milkLogs, milkEntries);
 
-    // â”€â”€ EGG LOGS (30 days) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── EGG LOGS (30 days) ────────────────────────────────
     const flock1Id = animalIds['#FL01'];
     const eggEntries = [];
     for (let day = 0; day < 30; day++) {
@@ -134,7 +134,7 @@ export async function seedDemoData() {
     }
     await bulkSeed(db.eggLogs, eggEntries);
 
-    // â”€â”€ WEIGHT LOGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── WEIGHT LOGS ───────────────────────────────────────
     const weightEntries = [
       { animalId:animalIds['#P10'], date:d(-28), weight:45.2, unit:'kg', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#P10'], date:d(-21), weight:52.8, unit:'kg', syncStatus:'synced', updatedAt:new Date() },
@@ -148,16 +148,16 @@ export async function seedDemoData() {
     ];
     await bulkSeed(db.weightLogs, weightEntries);
 
-    // â”€â”€ TREATMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── TREATMENTS ────────────────────────────────────────
     await bulkSeed(db.treatments, [
-      { animalId:animalIds['#045'], date:d(-6),  diagnosis:'Mastitis - Right Rear Quarter', symptoms:'Swollen quarter, high SCC 450k', vet:'Dr. Kamau', treatment:'Amoxicillin 10mg/kg Ã— 5 days IM', cost:2400, withdrawal:12, withdrawalEnd:d(6),  status:'Active',   notes:'Quarter responding well. Recheck in 3 days.', syncStatus:'synced', updatedAt:new Date() },
+      { animalId:animalIds['#045'], date:d(-6),  diagnosis:'Mastitis - Right Rear Quarter', symptoms:'Swollen quarter, high SCC 450k', vet:'Dr. Kamau', treatment:'Amoxicillin 10mg/kg × 5 days IM', cost:2400, withdrawal:12, withdrawalEnd:d(6),  status:'Active',   notes:'Quarter responding well. Recheck in 3 days.', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#012'], date:d(-45), diagnosis:'Foot Rot',                       symptoms:'Lameness, foul smell between claws', vet:'Dr. Kamau', treatment:'Oxytetracycline spray + hoof trim', cost:800, withdrawal:0, withdrawalEnd:null, status:'Resolved', notes:'Fully recovered.',                           syncStatus:'synced', updatedAt:new Date() },
-      { animalId:animalIds['#P01'], date:d(-25), diagnosis:'MMA Syndrome',                    symptoms:'Off feed, fever 41Â°C, reduced milk', vet:'Dr. Njeri', treatment:'Oxytocin 20IU IM + Penicillin 5 days', cost:1500, withdrawal:7, withdrawalEnd:d(-18), status:'Resolved', notes:'Piglets survived.', syncStatus:'synced', updatedAt:new Date() },
+      { animalId:animalIds['#P01'], date:d(-25), diagnosis:'MMA Syndrome',                    symptoms:'Off feed, fever 41°C, reduced milk', vet:'Dr. Njeri', treatment:'Oxytocin 20IU IM + Penicillin 5 days', cost:1500, withdrawal:7, withdrawalEnd:d(-18), status:'Resolved', notes:'Piglets survived.', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#G01'], date:d(-10), diagnosis:'Worms - High FEC',                symptoms:'Weight loss, bottle jaw', vet:'Dr. Kamau', treatment:'Albendazole 7.5mg/kg PO',            cost:350, withdrawal:3, withdrawalEnd:d(-7),  status:'Resolved', notes:'FAMACHA score improving.', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#067'], date:d(-90), diagnosis:'Respiratory Infection',            symptoms:'Coughing, nasal discharge', vet:'Dr. Njeri', treatment:'Florfenicol 20mg/kg SC',            cost:1200, withdrawal:0, withdrawalEnd:null, status:'Resolved', notes:'Full recovery.', syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ VACCINATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── VACCINATIONS ──────────────────────────────────────
     await bulkSeed(db.vaccinations, [
       { animalId:animalIds['#045'], date:d(-30),  vaccine:'FMD Vaccine', batchNo:'FMD2025A', dose:'2ml IM', vet:'Dr. Kamau', nextDue:d(150),  notes:'', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#012'], date:d(-30),  vaccine:'FMD Vaccine', batchNo:'FMD2025A', dose:'2ml IM', vet:'Dr. Kamau', nextDue:d(150),  notes:'', syncStatus:'synced', updatedAt:new Date() },
@@ -165,13 +165,13 @@ export async function seedDemoData() {
       { animalId:animalIds['#FL01'],date:d(-60),  vaccine:'Gumboro (IBD)', batchNo:'IBD2025B', dose:'Drinking water', vet:'Dr. Njeri', nextDue:d(120), notes:'', syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ REPRODUCTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── REPRODUCTION ──────────────────────────────────────
     await bulkSeed(db.heatLogs, [
       { animalId:animalIds['#088'], date:d(-21), signs:['Standing heat','Mucus discharge'], intensity:'Strong', notes:'Clear standing heat observed 06:00', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#G03'], date:d(-18), signs:['Restless','Tail flagging'], intensity:'Mild', notes:'', syncStatus:'synced', updatedAt:new Date() },
     ]);
     await bulkSeed(db.breedingLogs, [
-      { animalId:animalIds['#088'], date:d(-21), method:'AI', sireId:'External â€“ Tansen Komacho', strawBatch:'STR-2024-089', technician:'James AI Tech', cost:1500, notes:'', syncStatus:'synced', updatedAt:new Date() },
+      { animalId:animalIds['#088'], date:d(-21), method:'AI', sireId:'External – Tansen Komacho', strawBatch:'STR-2024-089', technician:'James AI Tech', cost:1500, notes:'', syncStatus:'synced', updatedAt:new Date() },
       { animalId:animalIds['#045'], date:d(-90), method:'AI', sireId:'External', strawBatch:'STR-2024-045', technician:'James AI Tech', cost:1500, notes:'', syncStatus:'synced', updatedAt:new Date() },
     ]);
     await bulkSeed(db.pregnancyChecks, [
@@ -183,7 +183,7 @@ export async function seedDemoData() {
       { damId:animalIds['#G01'], date:d(-45), calves:[{ tag:'#G04', sex:'M', weight:3.2, vitality:'Good', ease:1 }], notes:'Single kid, healthy.', syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ FEED INVENTORY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── FEED INVENTORY ────────────────────────────────────
     await bulkSeed(db.feedInventory, [
       { feedType:'Dairy Meal', supplier:'Unga Feeds', quantity:850, unit:'kg', minStock:200, costPerUnit:19, species:'cattle', lastRestocked:d(-3), syncStatus:'synced', updatedAt:new Date() },
       { feedType:'Hay Bales',  supplier:'Local Farm',  quantity:45,  unit:'bales', minStock:20, costPerUnit:120, species:'cattle', lastRestocked:d(-7), syncStatus:'synced', updatedAt:new Date() },
@@ -193,22 +193,22 @@ export async function seedDemoData() {
       { feedType:'Goat Pellets',supplier:'Unga Feeds', quantity:95,  unit:'kg', minStock:50, costPerUnit:55, species:'goats', lastRestocked:d(-10), syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ FINANCES (3 months) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── FINANCES (3 months) ───────────────────────────────
     const finEntries = [];
     for (let m = 0; m < 90; m++) {
       const date = d(-m);
-      if (m % 1 === 0) finEntries.push({ type:'income',  date, category:'Milk Sales',        species:'cattle',  amount: Math.floor(16000+Math.random()*5000), description:'Brookside Dairy â€“ Daily collection', paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
-      if (m % 3 === 0) finEntries.push({ type:'income',  date, category:'Egg Sales',          species:'poultry', amount: Math.floor(5500+Math.random()*2000),  description:'Tuskys Supermarket â€“ Weekly supply', paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
+      if (m % 1 === 0) finEntries.push({ type:'income',  date, category:'Milk Sales',        species:'cattle',  amount: Math.floor(16000+Math.random()*5000), description:'Brookside Dairy – Daily collection', paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
+      if (m % 3 === 0) finEntries.push({ type:'income',  date, category:'Egg Sales',          species:'poultry', amount: Math.floor(5500+Math.random()*2000),  description:'Tuskys Supermarket – Weekly supply', paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
       if (m % 7 === 0) finEntries.push({ type:'income',  date, category:'Goat Milk Sales',    species:'goats',   amount: Math.floor(900+Math.random()*400),    description:'Local market',                        paymentMethod:'Cash', syncStatus:'synced', updatedAt:new Date() });
-      if (m % 14 === 0)finEntries.push({ type:'income',  date, category:'Piglet Sales',       species:'pigs',    amount: Math.floor(10000+Math.random()*5000), description:'Weaner piglets Ã—4',                  paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
-      if (m % 3 === 0) finEntries.push({ type:'expense', date, category:'Feed â€“ Dairy Meal',  species:'cattle',  amount: Math.floor(9000+Math.random()*2000),  description:'50kg Ã— 10 bags Unga',                paymentMethod:'Bank Transfer', syncStatus:'synced', updatedAt:new Date() });
-      if (m % 5 === 0) finEntries.push({ type:'expense', date, category:'Feed â€“ Layer Mash',  species:'poultry', amount: Math.floor(4500+Math.random()*1000),  description:'50kg Ã— 6 bags',                      paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
+      if (m % 14 === 0)finEntries.push({ type:'income',  date, category:'Piglet Sales',       species:'pigs',    amount: Math.floor(10000+Math.random()*5000), description:'Weaner piglets ×4',                  paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
+      if (m % 3 === 0) finEntries.push({ type:'expense', date, category:'Feed – Dairy Meal',  species:'cattle',  amount: Math.floor(9000+Math.random()*2000),  description:'50kg × 10 bags Unga',                paymentMethod:'Bank Transfer', syncStatus:'synced', updatedAt:new Date() });
+      if (m % 5 === 0) finEntries.push({ type:'expense', date, category:'Feed – Layer Mash',  species:'poultry', amount: Math.floor(4500+Math.random()*1000),  description:'50kg × 6 bags',                      paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
       if (m % 7 === 0) finEntries.push({ type:'expense', date, category:'Labour',             species:'overhead',amount: Math.floor(18000+Math.random()*2000), description:'Weekly wages',                        paymentMethod:'Mpesa', syncStatus:'synced', updatedAt:new Date() });
       if (m % 30 === 0)finEntries.push({ type:'expense', date, category:'Veterinary',         species:'cattle',  amount: Math.floor(2000+Math.random()*3000),  description:'Vet visit + medicines',               paymentMethod:'Cash', syncStatus:'synced', updatedAt:new Date() });
     }
     await bulkSeed(db.transactions, finEntries);
 
-    // â”€â”€ EMPLOYEES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── EMPLOYEES ─────────────────────────────────────────
     const empIds = await bulkSeed(db.employees, [
       { name:'James Mwangi', role:'manager',  phone:'0712 345 678', nationalId:'12345678', hireDate:'2020-01-15', section:'All',     salary:28000, status:'active', syncStatus:'synced', updatedAt:new Date() },
       { name:'Grace Wanjiku',role:'worker',   phone:'0723 456 789', nationalId:'23456789', hireDate:'2021-03-01', section:'Cattle',  salary:18000, status:'active', syncStatus:'synced', updatedAt:new Date() },
@@ -230,18 +230,18 @@ export async function seedDemoData() {
 
     // Tasks
     await bulkSeed(db.tasks, [
-      { title:'Morning milking â€“ Barn A+B', assignedTo:empIds[1], dueDate:today, dueTime:'06:30', priority:'high',   status:'done',    species:'cattle',  notes:'', syncStatus:'synced' },
-      { title:'Pig feeding â€“ Unit A+B+C',  assignedTo:empIds[2], dueDate:today, dueTime:'07:00', priority:'high',   status:'pending', species:'pigs',    notes:'', syncStatus:'synced' },
-      { title:'Egg collection â€“ House A',   assignedTo:empIds[3], dueDate:today, dueTime:'07:30', priority:'high',   status:'done',    species:'poultry', notes:'', syncStatus:'synced' },
+      { title:'Morning milking – Barn A+B', assignedTo:empIds[1], dueDate:today, dueTime:'06:30', priority:'high',   status:'done',    species:'cattle',  notes:'', syncStatus:'synced' },
+      { title:'Pig feeding – Unit A+B+C',  assignedTo:empIds[2], dueDate:today, dueTime:'07:00', priority:'high',   status:'pending', species:'pigs',    notes:'', syncStatus:'synced' },
+      { title:'Egg collection – House A',   assignedTo:empIds[3], dueDate:today, dueTime:'07:30', priority:'high',   status:'done',    species:'poultry', notes:'', syncStatus:'synced' },
       { title:'Silage pit inspection',      assignedTo:empIds[0], dueDate:today, dueTime:'09:00', priority:'medium', status:'pending', species:'cattle',  notes:'', syncStatus:'synced' },
       { title:'Goat shed cleaning',         assignedTo:empIds[4], dueDate:today, dueTime:'10:00', priority:'low',    status:'pending', species:'goats',   notes:'', syncStatus:'synced' },
-      { title:'Evening milking â€“ all cows', assignedTo:empIds[1], dueDate:today, dueTime:'17:00', priority:'high',   status:'pending', species:'cattle',  notes:'', syncStatus:'synced' },
+      { title:'Evening milking – all cows', assignedTo:empIds[1], dueDate:today, dueTime:'17:00', priority:'high',   status:'pending', species:'cattle',  notes:'', syncStatus:'synced' },
     ]);
 
     // Payroll
     await bulkSeed(db.payroll, empIds.map(id => ({ employeeId:id, month:today.slice(0,7), status:'pending', paidDate:null, mpesaRef:'', syncStatus:'synced' })));
 
-    // â”€â”€ SUPPLIERS & PROCUREMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── SUPPLIERS & PROCUREMENT ───────────────────────────
     const supIds = await bulkSeed(db.suppliers, [
       { name:'Unga Feeds Ltd', contact:'0722 111 222', location:'Nairobi', terms:'Net 30', mpesa:'522522', rating:4.5, syncStatus:'synced', updatedAt:new Date() },
       { name:'Pembe Feeds',    contact:'0733 222 333', location:'Nakuru',  terms:'Immediate', mpesa:'522523', rating:4.0, syncStatus:'synced', updatedAt:new Date() },
@@ -249,17 +249,17 @@ export async function seedDemoData() {
     ], { allKeys: true });
     const poIds = await bulkSeed(db.purchaseOrders, [
       { supplierId:supIds[0], poNumber:'PO-2025-001', items:[{ name:'Dairy Meal 50kg', qty:20, unit:'bags', unitCost:950 }], totalCost:19000, status:'received',  raisedBy:'James Mwangi', date:d(-14), deliveryDate:d(-10), approvedBy:'Owner',      notes:'', syncStatus:'synced', updatedAt:new Date() },
-      { supplierId:supIds[2], poNumber:'PO-2025-002', items:[{ name:'FMD Vaccine 100ml', qty:5, unit:'vials', unitCost:2200 }], totalCost:11000, status:'approved',  raisedBy:'James Mwangi', date:d(-5),  deliveryDate:d(2), approvedBy:'Owner',       notes:'Urgent â€“ vaccination due.', syncStatus:'synced', updatedAt:new Date() },
+      { supplierId:supIds[2], poNumber:'PO-2025-002', items:[{ name:'FMD Vaccine 100ml', qty:5, unit:'vials', unitCost:2200 }], totalCost:11000, status:'approved',  raisedBy:'James Mwangi', date:d(-5),  deliveryDate:d(2), approvedBy:'Owner',       notes:'Urgent – vaccination due.', syncStatus:'synced', updatedAt:new Date() },
       { supplierId:supIds[0], poNumber:'PO-2025-003', items:[{ name:'Layer Mash 50kg', qty:10, unit:'bags', unitCost:2400 }], totalCost:24000, status:'pending',    raisedBy:'Mary Njeri',  date:today,  deliveryDate:d(3),  approvedBy:'',           notes:'', syncStatus:'synced', updatedAt:new Date() },
     ], { allKeys: true });
     await bulkSeed(db.grns, [
       { poId:poIds[0], date:d(-10), receivedBy:'Peter Otieno', items:[{ name:'Dairy Meal 50kg', qtyOrdered:20, qtyReceived:20, unit:'bags', qualityPass:true }], notes:'All bags intact.', syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ ASSETS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── ASSETS ────────────────────────────────────────────
     const assetIds = await bulkSeed(db.assets, [
       { name:'Milk Cooling Tank 2000L', type:'Equipment', make:'DeLaval', serial:'DL-2019-445', purchaseDate:'2019-06-01', purchaseCost:850000, condition:'Good',       nextService:d(30),  status:'active', syncStatus:'synced', updatedAt:new Date() },
-      { name:'Tractor â€“ New Holland T5', type:'Vehicle',   make:'New Holland', serial:'NH-T5-2021', purchaseDate:'2021-03-15', purchaseCost:3200000, condition:'Good',  nextService:d(60),  status:'active', syncStatus:'synced', updatedAt:new Date() },
+      { name:'Tractor – New Holland T5', type:'Vehicle',   make:'New Holland', serial:'NH-T5-2021', purchaseDate:'2021-03-15', purchaseCost:3200000, condition:'Good',  nextService:d(60),  status:'active', syncStatus:'synced', updatedAt:new Date() },
       { name:'Feed Mixer 500kg',         type:'Equipment', make:'Skiold', serial:'SK-500-2020', purchaseDate:'2020-08-10', purchaseCost:480000, condition:'Fair',        nextService:d(-5),  status:'active', syncStatus:'synced', updatedAt:new Date() },
       { name:'Borehole Pump 3HP',        type:'Infrastructure', make:'Grundfos', serial:'GF-3HP-2018', purchaseDate:'2018-01-20', purchaseCost:180000, condition:'Good', nextService:d(90),  status:'active', syncStatus:'synced', updatedAt:new Date() },
     ], { allKeys: true });
@@ -268,10 +268,10 @@ export async function seedDemoData() {
       { assetId:assetIds[1], date:d(-45), workDone:'Oil change, filter replacement, greasing', technician:'NH Dealer Nairobi', parts:'Oil 10L, filters', cost:25000, downtimeHours:3, syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ CROPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── CROPS ─────────────────────────────────────────────
     const plotIds = await bulkSeed(db.plots, [
-      { name:'Paddock A â€“ Napier', size:2.5, unit:'acres', gps:'-0.3200,36.8800', soilType:'Loam', currentUse:'Fodder', syncStatus:'synced', updatedAt:new Date() },
-      { name:'Plot B â€“ Maize',     size:4.0, unit:'acres', gps:'-0.3210,36.8790', soilType:'Clay Loam', currentUse:'Crop', syncStatus:'synced', updatedAt:new Date() },
+      { name:'Paddock A – Napier', size:2.5, unit:'acres', gps:'-0.3200,36.8800', soilType:'Loam', currentUse:'Fodder', syncStatus:'synced', updatedAt:new Date() },
+      { name:'Plot B – Maize',     size:4.0, unit:'acres', gps:'-0.3210,36.8790', soilType:'Clay Loam', currentUse:'Crop', syncStatus:'synced', updatedAt:new Date() },
       { name:'Silage Pit',         size:0.5, unit:'acres', gps:'-0.3220,36.8810', soilType:'N/A', currentUse:'Storage', syncStatus:'synced', updatedAt:new Date() },
     ], { allKeys: true });
     await bulkSeed(db.cropPlans, [
@@ -281,26 +281,26 @@ export async function seedDemoData() {
       { plotId:plotIds[0], date:d(-30), crop:'Napier Grass', quantity:2.8, unit:'tonnes', qualityGrade:'A', notes:'Good yield after rains.', syncStatus:'synced', updatedAt:new Date() },
     ]);
 
-    // â”€â”€ NOTIFICATIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── NOTIFICATIONS ─────────────────────────────────────
     await bulkSeed(db.notifications, [
       { type:'health',     priority:'urgent',   title:'Withdrawal Lock Active',       body:'Daisy #045 milk cannot be sold until '+d(6)+'. Lock expires in 6 days.',           read:false, timestamp:new Date(Date.now()-600000) },
-      { type:'production', priority:'urgent',   title:'Yield Drop Alert',              body:'Daisy #045 has dropped 23% vs her 7-day average â€“ health check recommended.',      read:false, timestamp:new Date(Date.now()-900000) },
+      { type:'production', priority:'urgent',   title:'Yield Drop Alert',              body:'Daisy #045 has dropped 23% vs her 7-day average – health check recommended.',      read:false, timestamp:new Date(Date.now()-900000) },
       { type:'feed',       priority:'warning',  title:'Low Feed Stock',                body:'Layer Mash below 7-day run rate (180kg left, need 250kg/week). Reorder now.',      read:false, timestamp:new Date(Date.now()-3600000) },
-      { type:'breeding',   priority:'warning',  title:'Breeding Overdue â€“ 3 Does',     body:'Nanny #G01, Clover #G03, and 1 other are overdue for breeding this cycle.',         read:false, timestamp:new Date(Date.now()-7200000) },
-      { type:'finance',    priority:'info',     title:'PO Pending Approval',           body:'PO-2025-003 (Layer Mash KES 24,000) raised by Mary Njeri â€“ awaiting approval.',    read:false, timestamp:new Date(Date.now()-10800000) },
-      { type:'health',     priority:'info',     title:'Vaccination Due â€“ Flock A',     body:'Layer House A Newcastle+IB booster due in '+60+' days. Schedule Dr. Njeri.',        read:true,  timestamp:new Date(Date.now()-86400000) },
+      { type:'breeding',   priority:'warning',  title:'Breeding Overdue – 3 Does',     body:'Nanny #G01, Clover #G03, and 1 other are overdue for breeding this cycle.',         read:false, timestamp:new Date(Date.now()-7200000) },
+      { type:'finance',    priority:'info',     title:'PO Pending Approval',           body:'PO-2025-003 (Layer Mash KES 24,000) raised by Mary Njeri – awaiting approval.',    read:false, timestamp:new Date(Date.now()-10800000) },
+      { type:'health',     priority:'info',     title:'Vaccination Due – Flock A',     body:'Layer House A Newcastle+IB booster due in '+60+' days. Schedule Dr. Njeri.',        read:true,  timestamp:new Date(Date.now()-86400000) },
       { type:'production', priority:'info',     title:'Feed Mixer Service Overdue',    body:'Feed Mixer SK-500-2020 service was due 5 days ago. Book technician.',               read:true,  timestamp:new Date(Date.now()-172800000) },
     ]);
 
-    // â”€â”€ CALENDAR EVENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── CALENDAR EVENTS ───────────────────────────────────
     await bulkSeed(db.calendarEvents, [
       { date:d(6),   type:'health',      title:'Daisy withdrawal lock expires', species:'cattle',  relatedId:animalIds['#045'], priority:'urgent', syncStatus:'synced' },
-      { date:d(30),  type:'health',      title:'Vaccination â€“ FMD booster all cattle', species:'cattle', relatedId:null, priority:'warning', syncStatus:'synced' },
+      { date:d(30),  type:'health',      title:'Vaccination – FMD booster all cattle', species:'cattle', relatedId:null, priority:'warning', syncStatus:'synced' },
       { date:d(45),  type:'reproduction',title:'Rose #091 expected calving date', species:'cattle',  relatedId:animalIds['#091'], priority:'high', syncStatus:'synced' },
-      { date:d(60),  type:'health',      title:'Newcastle booster â€“ House A (500 birds)', species:'poultry', relatedId:animalIds['#FL01'], priority:'warning', syncStatus:'synced' },
+      { date:d(60),  type:'health',      title:'Newcastle booster – House A (500 birds)', species:'poultry', relatedId:animalIds['#FL01'], priority:'warning', syncStatus:'synced' },
       { date:d(3),   type:'procurement', title:'PO-2025-002 expected delivery (FMD Vaccine)', species:'all', relatedId:null, priority:'info', syncStatus:'synced' },
-      { date:d(30),  type:'crops',       title:'Maize silage harvest â€“ Plot B', species:'all',   relatedId:plotIds[1], priority:'info', syncStatus:'synced' },
-      { date:today,  type:'task',        title:'Evening milking â€“ all cows', species:'cattle',   relatedId:null, priority:'high', syncStatus:'synced' },
+      { date:d(30),  type:'crops',       title:'Maize silage harvest – Plot B', species:'all',   relatedId:plotIds[1], priority:'info', syncStatus:'synced' },
+      { date:today,  type:'task',        title:'Evening milking – all cows', species:'cattle',   relatedId:null, priority:'high', syncStatus:'synced' },
       { date:d(-5),  type:'asset',       title:'Feed Mixer service overdue', species:'all',       relatedId:assetIds[2], priority:'warning', syncStatus:'synced' },
     ]);
   });

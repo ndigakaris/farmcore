@@ -7,7 +7,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { SPECIES } from '../../constants/index.js';
 import { KPICard, SectionCard, StatGrid } from '../../components/UI.jsx';
-import { formatDate, offsetDate, daysFromNow } from '../../utils/index.js';
+import { offsetDate, daysFromNow } from '../../utils/index.js';
 
 // ── AI Farm Brief ──────────────────────────────────────────────
 // Calls /api/farm-brief (Vercel serverless function) so the API key

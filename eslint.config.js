@@ -31,7 +31,13 @@ export default [
     rules: {
       ...js.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+
+      // Off, deliberately. This rule exists to make Vite's hot reload
+      // slightly faster in dev; it flags the ordinary React idiom of
+      // exporting a Provider and its `use…` hook from the same context
+      // file. Splitting those apart across the codebase would buy nothing
+      // at runtime, so the rule is noise here rather than a signal.
+      'react-refresh/only-export-components': 'off',
 
       // Warn, not error: the pre-existing feature modules carry a number
       // of dead locals. They are worth seeing but must not block a
@@ -45,14 +51,25 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       eqeqeq: ['warn', 'smart'],
 
-      // React Compiler diagnostics. This codebase does not run the
-      // compiler, so these are advisory — useful to see, but they must
-      // not fail the build over pre-existing component structure.
-      'react-hooks/purity': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/immutability': 'warn',
-      'react-hooks/refs': 'warn',
+      // React Compiler diagnostics, off deliberately. They describe why
+      // the compiler would decline to optimise a component — but this
+      // project does not run the React Compiler, so they report on an
+      // optimisation that never happens. The remaining hits are all the
+      // ordinary "load once on mount" effect, which React itself
+      // documents as correct.
+      //
+      // Turn these back on as warnings the day the compiler is adopted;
+      // they become genuinely useful then.
+      'react-hooks/purity': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+
+      // These two stay ON — they catch real bugs (stale closures over
+      // props, hooks called conditionally), not compiler preferences.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
 

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
 import { PageHeader, KPICard, StatGrid, SectionCard } from '../../components/UI.jsx';
-import { formatDate, daysFromNow, offsetDate } from '../../utils/index.js';
+import { daysFromNow, offsetDate, todayStr } from '../../utils/index.js';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -20,6 +20,10 @@ const TYPE_COLORS = {
 
 export default function Calendar() {
   const today = new Date();
+  // `today` is a fresh object on every render, so it can never be a useful
+  // memo dependency. The ISO string is stable for the whole day, which is
+  // what the memos below actually care about.
+  const todayIso = todayStr();
   const [view, setView] = useState({ year:today.getFullYear(), month:today.getMonth() });
 
   const allEvents = useLiveQuery(() => db.calendarEvents.toArray(), []);
@@ -40,20 +44,19 @@ export default function Calendar() {
     for (let i=0; i<first.getDay(); i++) days.push(null);
     for (let d=1; d<=last.getDate(); d++) {
       const dateStr = `${view.year}-${String(view.month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      days.push({ d, dateStr, isToday:dateStr===today.toISOString().split('T')[0] });
+      days.push({ d, dateStr, isToday:dateStr===todayIso });
     }
     return days;
-  }, [view]);
+  }, [view, todayIso]);
 
   const prevMonth = () => setView(v => v.month===0?{year:v.year-1,month:11}:{...v,month:v.month-1});
   const nextMonth = () => setView(v => v.month===11?{year:v.year+1,month:0}:{...v,month:v.month+1});
 
   // Next 14 days upcoming
   const upcoming = useMemo(() => {
-    const from = today.toISOString().split('T')[0];
-    const to   = offsetDate(14);
-    return (allEvents||[]).filter(ev=>ev.date>=from&&ev.date<=to).sort((a,b)=>a.date.localeCompare(b.date));
-  }, [allEvents]);
+    const to = offsetDate(14);
+    return (allEvents||[]).filter(ev=>ev.date>=todayIso&&ev.date<=to).sort((a,b)=>a.date.localeCompare(b.date));
+  }, [allEvents, todayIso]);
 
   return (
     <div className="page-content">
@@ -112,7 +115,7 @@ export default function Calendar() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-[#1a3009] leading-snug">{ev.title}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5 capitalize">{ev.type} · {days===0?'Today':days===1?'Tomorrow':`In ${days}d`}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5 capitalize">{ev.type} Â· {days===0?'Today':days===1?'Tomorrow':`In ${days}d`}</p>
                     </div>
                   </div>
                 );

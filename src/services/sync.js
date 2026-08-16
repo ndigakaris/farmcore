@@ -81,6 +81,11 @@ export function resetWatermarks(farmId) {
   }
 }
 
+// Leaving a farm clears its local cache, so its watermarks must go too —
+// otherwise returning to it would resume mid-history and never re-fetch
+// the records the wipe removed.
+onFarmChanged.add((previous) => resetWatermarks(previous));
+
 // ── Status broadcasting ───────────────────────────────────────
 // The UI subscribes so the TopBar can honestly show "3 records waiting"
 // instead of a permanently green tick.
@@ -148,29 +153,29 @@ export async function pushPending(farmId) {
         failed += batch.length;
         // Record the failure ON the rows so a single malformed record
         // can be found and fixed instead of silently jamming the queue.
-        await Promise.all(batch.map(async (r) => {
+        await t.bulkPut(batch.map((r) => {
           const attempts = (r.syncAttempts || 0) + 1;
-          await t.update(r.id, {
+          return {
+            ...r,
             syncAttempts: attempts,
             syncError: error.message,
-            ...(attempts >= MAX_ATTEMPTS ? { syncStatus: 'error' } : {}),
-          }).catch(() => {});
-        }));
+            syncStatus: attempts >= MAX_ATTEMPTS ? 'error' : r.syncStatus,
+          };
+        })).catch(() => {});
         console.warn(`[sync] push ${remote} failed:`, error.message);
         continue;
       }
 
       const serverById = Object.fromEntries((data || []).map((r) => [r.id, r]));
 
-      await Promise.all(batch.map(async (r) => {
-        const server = serverById[r.id];
-        await t.update(r.id, {
-          syncStatus: 'synced',
-          syncError: null,
-          syncAttempts: 0,
-          ...(server?.updated_at ? { updatedAt: server.updated_at } : {}),
-        }).catch(() => {});
-      }));
+      // One bulkPut rather than a write per record.
+      await t.bulkPut(batch.map((r) => ({
+        ...r,
+        syncStatus: 'synced',
+        syncError: null,
+        syncAttempts: 0,
+        ...(serverById[r.id]?.updated_at ? { updatedAt: serverById[r.id].updated_at } : {}),
+      }))).catch(() => {});
 
       pushed += batch.length;
     }
@@ -275,28 +280,41 @@ export async function pull(farmId, { full = false } = {}) {
         if (error) throw error;
         if (!data || data.length === 0) break;
 
+        // Process the page in bulk. Doing this row-by-row meant one
+        // IndexedDB round-trip per record — a farm with a year of milk
+        // logs would spend minutes on the first sync, on a phone.
+        const incoming = [];
+        const removals = [];
+
         for (const row of data) {
           if (row.updated_at && row.updated_at > highest) highest = row.updated_at;
-
           const record = toCamel(row);
+          // Deleted on another device — drop it here too.
+          if (record.deletedAt) removals.push(record.id);
+          else incoming.push(record);
+        }
 
-          // A row deleted on another device: drop it here too.
-          if (record.deletedAt) {
-            await t.delete(record.id).catch(() => {});
-            pulled++;
-            continue;
-          }
+        if (removals.length) {
+          await t.bulkDelete(removals).catch(() => {});
+          pulled += removals.length;
+        }
 
+        if (incoming.length) {
           // Never clobber an edit that has not been pushed yet. Push runs
           // first, so anything still pending means the push failed — the
           // farmer's typing outranks the stale server copy.
-          const existing = await t.get(record.id);
-          if (existing && (existing.syncStatus === 'pending' || existing.syncStatus === 'error')) {
-            continue;
-          }
+          const existing = await t.bulkGet(incoming.map((r) => r.id));
+          const keep = incoming.filter((_, i) => {
+            const local = existing[i];
+            return !local || (local.syncStatus !== 'pending' && local.syncStatus !== 'error');
+          });
 
-          await t.put({ ...record, syncStatus: 'synced', syncError: null, syncAttempts: 0 });
-          pulled++;
+          if (keep.length) {
+            await t.bulkPut(keep.map((r) => ({
+              ...r, syncStatus: 'synced', syncError: null, syncAttempts: 0,
+            })));
+            pulled += keep.length;
+          }
         }
 
         if (data.length < PAGE_SIZE) break;

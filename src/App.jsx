@@ -3,8 +3,8 @@ import { useState, lazy, Suspense } from 'react';
 import { useAuth } from './context/AuthContext.jsx';
 import { useApp }  from './context/AppContext.jsx';
 
-// Auth (farm-creation wizard is parked for now — not routed to on reload)
-import AuthPage from './features/auth/AuthPages.jsx';
+// Auth + the first-run farm setup wizard
+import AuthPage, { FarmSetup } from './features/auth/AuthPages.jsx';
 
 // Shell — always needed, loaded eagerly
 import Sidebar from './components/Sidebar.jsx';
@@ -127,7 +127,7 @@ function FarmLoadError({ error, onRetry }) {
 const ACTIVE_PAGE_KEY = 'farmcore_active_page';
 
 export default function App() {
-  const { user, farm, loading, farmError, refreshFarm } = useAuth();
+  const { user, farm, loading, farmError, farmResolved, refreshFarm } = useAuth();
   const { mobileNavOpen, setMobileNavOpen, permissions } = useApp();
 
   // Restore the last-open feature so a reload returns there instead of
@@ -140,13 +140,21 @@ export default function App() {
   if (loading) return <BootLoader />;
   if (!user)   return <AuthPage />;
 
-  // User is authenticated. The farm is rehydrated from local cache on reload,
-  // so we land straight on the dashboard/last page. Farm creation + licensing
-  // are intentionally parked, so we NEVER route to the setup wizard here. If
-  // the background refresh failed AND we have no cached farm, show a retry
-  // (not onboarding); otherwise keep loading.
+  // User is authenticated but has no farm. Three genuinely different cases,
+  // and telling them apart is what stops an existing farmer being dropped
+  // into onboarding because their connection blipped.
   if (!farm) {
+    // 1. The lookup FAILED. Never onboard on an error — offer a retry.
     if (farmError) return <FarmLoadError error={farmError} onRetry={refreshFarm} />;
+
+    // 2. The lookup SUCCEEDED and there genuinely is no farm: a brand-new
+    //    signup. Run the setup wizard. This was previously unreachable —
+    //    create_farm_with_license() did not exist, so the wizard could only
+    //    fail, and new users sat on the boot spinner indefinitely with no
+    //    way into the app at all.
+    if (farmResolved) return <FarmSetup />;
+
+    // 3. Still resolving.
     return <BootLoader />;
   }
 

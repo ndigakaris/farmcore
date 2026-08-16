@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
 import { create } from '../../db/repo.js';
 import { asId } from '../../db/ids.js';
-import { useApp } from '../../context/AppContext.jsx';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable } from '../../components/UI.jsx';
 import { formatDate, todayStr } from '../../utils/index.js';
 import { Plus, Leaf } from 'lucide-react';
@@ -124,7 +123,6 @@ function CropPlanForm({ plots, onClose }) {
 }
 
 export default function Crops() {
-  const { formatCurrency } = useApp();
   const [tab,      setTab]      = useState('plots');
   const [showPlot, setShowPlot] = useState(false);
   const [showPlan, setShowPlan] = useState(false);

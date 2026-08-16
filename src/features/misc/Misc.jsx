@@ -77,7 +77,6 @@ import { SectionCard } from '../../components/UI.jsx';
 import { BarChart3, TrendingUp, Beef, Droplets, DollarSign, Users, FileDown } from 'lucide-react';
 
 export function Reports() {
-  const { formatCurrency } = useApp();
   const REPORT_CARDS = [
     { icon:'🥛', title:'Milk Production Report', desc:'Daily, weekly & monthly yields by cow, breed, and shift. Includes SCC trend and fat/protein averages.', period:'Last 30 days', color:'#eef5dd' },
     { icon:'🥚', title:'Egg Collection Report',  desc:'Daily egg totals, lay rate %, grading breakdown, and feed conversion ratio by flock.', period:'Last 30 days', color:'#fef9ec' },
@@ -113,29 +112,21 @@ export function Reports() {
 
 // Notifications module
 export function Notifications() {
-  const { setUnreadCount } = useApp();
   // Ordered by createdAt: the local `timestamp` field never existed on the
   // server copy (Postgres calls it created_at), so pulled notifications
   // sorted as undefined and jumped to the end of the list.
   const notifications = useLiveQuery(
     () => db.notifications.orderBy('createdAt').reverse().toArray(), []);
 
-  // Booleans are not valid IndexedDB keys, so the old
-  // `.where('read').equals(0)` never matched a record stored as
-  // `read:false` — the unread badge was permanently stuck.
-  const unread = async () =>
-    (await db.notifications.filter(n => !n.read && !n.deletedAt).count());
+  // The sidebar badge is a live query over the same table, so it follows
+  // these writes on its own — no manual count to push back into context.
+  const markRead = (id) => update('notifications', id, { read: true });
 
-  const markRead = async (id) => {
-    await update('notifications', id, { read: true });
-    setUnreadCount(await unread());
-  };
   const markAllRead = async () => {
     const ids = (await db.notifications.filter(n => !n.read).toArray()).map(n => n.id);
     // Go through the repo so each row is flagged pending and the "read"
     // state actually follows the user to their other devices.
     await Promise.all(ids.map(id => update('notifications', id, { read: true })));
-    setUnreadCount(0);
   };
   const PRIORITY_COLORS = { urgent:'border-l-red-500 bg-red-50', warning:'border-l-amber-400 bg-amber-50', info:'border-l-blue-400 bg-blue-50' };
   return (

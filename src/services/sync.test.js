@@ -43,18 +43,24 @@ function makeQuery(tableName) {
     upsert(rows) {
       const list = Array.isArray(rows) ? rows : [rows];
       server.upserts.push({ table: tableName, rows: list });
-      if (server.failTables.has(tableName)) {
-        return {
-          select: () => Promise.resolve({
-            data: null,
-            error: { message: `invalid input for ${tableName}` },
-          }),
-        };
-      }
-      // Emulate the DB trigger stamping its own updated_at.
-      const stored = list.map(r => ({ ...r, updated_at: '2026-01-01T00:00:00Z' }));
-      server.rows[tableName] = [...(server.rows[tableName] || []), ...stored];
-      return { select: () => Promise.resolve({ data: stored, error: null }) };
+
+      const result = server.failTables.has(tableName)
+        ? { data: null, error: { message: `invalid input for ${tableName}` } }
+        : (() => {
+            // Emulate the DB trigger stamping its own updated_at.
+            const stored = list.map(r => ({ ...r, updated_at: '2026-01-01T00:00:00Z' }));
+            server.rows[tableName] = [...(server.rows[tableName] || []), ...stored];
+            return { data: stored, error: null };
+          })();
+
+      // PostgrestBuilder is itself a thenable, so callers may either await
+      // it directly (the deletion push) or chain .select() first (the
+      // record push). The stub has to support both or it silently reports
+      // success for every un-chained call.
+      return {
+        select: () => Promise.resolve(result),
+        then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+      };
     },
   };
   return q;
@@ -175,19 +181,59 @@ describe('push', () => {
     expect((await db.animals.get(id)).syncStatus).toBe('pending');
   });
 
-  it('pushes a delete as a tombstone, then drops the local row', async () => {
+  it('removes a deleted row from the UI immediately, even offline', async () => {
     const id = await repo.create('animals', { name: 'X', tag: '#9' });
     await sync.pushPending(FARM);
 
     await repo.remove('animals', id);
-    expect((await db.animals.get(id)).deletedAt).toBeTruthy();
+
+    // Gone from its table at once — a farmer must never see a record they
+    // just deleted, however long they stay out of signal.
+    expect(await db.animals.get(id)).toBeUndefined();
+    // ...but the deletion is queued so the cloud finds out.
+    expect(await db.tombstones.count()).toBe(1);
+  });
+
+  it('pushes the queued deletion, then clears the outbox', async () => {
+    const id = await repo.create('animals', { name: 'X', tag: '#9' });
+    await sync.pushPending(FARM);
+    await repo.remove('animals', id);
 
     await sync.pushPending(FARM);
 
     const sent = server.upserts.at(-1).rows[0];
+    expect(sent.id).toBe(id);
     expect(sent.deleted_at).toBeTruthy();
-    // Reaped locally only after the server accepted the tombstone.
+    expect(await db.tombstones.count()).toBe(0);
+  });
+
+  it('does not queue a deletion for a record the server never had', async () => {
+    // Created and deleted while offline — Postgres has nothing to mark.
+    const id = await repo.create('animals', { name: 'Never pushed', tag: '#9' });
+    await repo.remove('animals', id);
+
     expect(await db.animals.get(id)).toBeUndefined();
+    expect(await db.tombstones.count()).toBe(0);
+  });
+
+  it('keeps the deletion queued when the push fails', async () => {
+    const id = await repo.create('animals', { name: 'X', tag: '#9' });
+    await sync.pushPending(FARM);
+    await repo.remove('animals', id);
+
+    server.failTables.add('animals');
+    await sync.pushPending(FARM);
+
+    expect(await db.tombstones.count()).toBe(1);
+    expect((await db.tombstones.toArray())[0].attempts).toBe(1);
+  });
+
+  it('counts queued deletions as pending work', async () => {
+    const id = await repo.create('animals', { name: 'X', tag: '#9' });
+    await sync.pushPending(FARM);
+    await repo.remove('animals', id);
+
+    expect(await sync.pendingCount()).toBe(1);
   });
 });
 
@@ -244,7 +290,7 @@ describe('pull', () => {
 
   it('applies a delete made on another device', async () => {
     const id = '44444444-4444-4444-8444-444444444444';
-    await db.animals.put({ id, farmId: FARM, name: 'Gone', syncStatus: 'synced', deletedAt: null });
+    await db.animals.put({ id, farmId: FARM, name: 'Gone', syncStatus: 'synced' });
 
     server.rows.animals = [{
       id, farm_id: FARM, name: 'Gone',
@@ -288,6 +334,34 @@ describe('pull', () => {
     const after = localStorage.getItem(`farmcore_wm:${FARM}:milk_logs`);
     expect(after).toBeNull();
     expect(localStorage.getItem(key)).toBeTruthy();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+describe('switching farms', () => {
+  const OTHER = '99999999-9999-4999-8999-999999999999';
+
+  it('wipes the previous farm\'s records so totals cannot mix', async () => {
+    await repo.create('animals', { name: 'Farm A cow', tag: '#1' });
+    await repo.create('transactions', { amount: 5000, type: 'income' });
+
+    await repo.setActiveFarm(OTHER);
+
+    expect(await db.animals.count()).toBe(0);
+    expect(await db.transactions.count()).toBe(0);
+  });
+
+  it('drops the old farm\'s watermarks so the new farm pulls in full', async () => {
+    localStorage.setItem(`farmcore_wm:${FARM}:animals`, '2026-05-05T00:00:00Z');
+    await repo.setActiveFarm(OTHER);
+    expect(localStorage.getItem(`farmcore_wm:${FARM}:animals`)).toBeNull();
+  });
+
+  it('keeps the cache when signing out and back into the same farm', async () => {
+    await repo.create('animals', { name: 'Still here', tag: '#1' });
+    await repo.setActiveFarm(null);   // sign out
+    await repo.setActiveFarm(FARM);   // sign back in
+    expect(await db.animals.count()).toBe(1);
   });
 });
 

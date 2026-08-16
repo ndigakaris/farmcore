@@ -173,7 +173,7 @@ function PayrollForm({ onClose }) {
                 <th className="table-th text-right font-bold">Net Pay</th>
               </tr></thead>
               <tbody>
-                {rows.map(({e,basic,nssf,nhif,net})=>(
+                {rows.map(({e,basic,net})=>(
                   <tr key={e.id} className="border-b border-[#F5F0E8]">
                     <td className="table-td font-medium">{e.name}</td>
                     <td className="table-td text-right"><input className="form-input py-0.5 text-right w-20 text-xs" value={overrides[e.id]?.basic??e.salary} onChange={ev=>setOv(e.id,'basic',ev.target.value)}/></td>

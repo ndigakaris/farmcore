@@ -72,15 +72,13 @@ export function AppProvider({ children }) {
   // version asked Supabase on every mount, so the badge was blank for
   // any farmer working out of signal — the exact situation in which the
   // app is supposed to keep working.
-  const liveUnread = useLiveQuery(
-    () => db.notifications.filter(n => !n.read && !n.deletedAt).count(),
+  // useLiveQuery re-runs by itself whenever the table changes, so marking
+  // a notification read updates this with no manual setter and no effect
+  // to keep the two in step.
+  const unreadCount = useLiveQuery(
+    () => db.notifications.filter(n => !n.read).count(),
     [], 0
-  );
-  const [unreadOverride, setUnreadCount] = useState(null);
-  const unreadCount = unreadOverride ?? liveUnread ?? 0;
-
-  // Reset the manual override whenever the live count moves.
-  useEffect(() => { setUnreadCount(null); }, [liveUnread]);
+  ) ?? 0;
 
   /** "Sync now" — used by the sidebar/topbar. */
   const syncNow = () => fullSync(farm?.id);
@@ -97,7 +95,7 @@ export function AppProvider({ children }) {
       pendingCount: syncState.pending,
       syncNow,
       // Notifications
-      unreadCount, setUnreadCount,
+      unreadCount,
       // TopBar
       species, setSpecies,
       currency, setCurrency,

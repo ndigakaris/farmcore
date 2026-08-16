@@ -99,9 +99,10 @@ export function AuthProvider({ children }) {
       const fu = rows?.[0] || null;
 
       if (!fu || !fu.farms) {
-        // Server returned no farm. Farm creation is intentionally parked for
-        // now, so we do NOT route to the wizard: if we already have a farm
-        // (from cache or a prior load), keep showing it.
+        // The query SUCCEEDED and returned no membership — this really is a
+        // new user. Mark it resolved so App can route to the setup wizard.
+        // (An *error* leaves farmResolved false, which is what keeps an
+        // existing farmer with a flaky connection out of onboarding.)
         setFarmResolved(true);
         return;
       }

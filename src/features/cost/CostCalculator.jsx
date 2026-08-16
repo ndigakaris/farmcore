@@ -9,8 +9,6 @@ import {
   ResponsiveContainer, Cell, PieChart, Pie, Legend, ReferenceLine
 } from 'recharts';
 import db from '../../db/schema.js';
-import { useApp } from '../../context/AppContext.jsx';
-import { todayStr } from '../../utils/index.js';
 
 // ── Constants ─────────────────────────────────────────────────
 const SPECIES_CONFIG = {
@@ -212,8 +210,7 @@ function useAnimalCost(animal, speciesData, days) {
 
     // Daily production history (last 14 days)
     const dailyHistory = Array.from({length:Math.min(14,days)},(_,i)=>{
-      const d = daysAgoStr(days-1-i);
-      const day = new Date(); day.setDate(day.getDate()-(days-1-i));
+        const day = new Date(); day.setDate(day.getDate()-(days-1-i));
       const dayStr = day.toISOString().split('T')[0];
       const liters = myMilk.filter(l=>l.date===dayStr).reduce((s,l)=>s+(l.amount||0),0);
       return { day: dayStr.slice(5), liters: +liters.toFixed(1) };
@@ -320,7 +317,6 @@ function AnimalCostCard({ animal, speciesData, days, sellingPriceOverride, onCli
 function AnimalDetailView({ animal, speciesData, days, sellingPriceOverride, onClose }) {
   const data = useAnimalCost(animal, speciesData, days);
   const [tab, setTab] = useState('overview');
-  const { formatCurrency } = useApp();
   if (!data) return null;
 
   const sp = sellingPriceOverride||data.avgSellingPrice;
@@ -687,7 +683,6 @@ function HerdRankingTable({ animals, speciesData, days, sellingPrice, onSelect }
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════
 export default function CostCalculator() {
-  const { formatCurrency } = useApp();
   const [species,      setSpecies]      = useState('cattle');
   const [period,       setPeriod]       = useState('month');
   const [manualPrice,  setManualPrice]  = useState(0);

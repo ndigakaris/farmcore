@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import db from '../../db/schema.js';
 import { create, update } from '../../db/repo.js';
 import { asId } from '../../db/ids.js';
-import { useApp } from '../../context/AppContext.jsx';
 import { SPECIES, DIAGNOSES } from '../../constants/index.js';
 import { Modal, KPICard, StatGrid, PageHeader, DataTable, SectionCard } from '../../components/UI.jsx';
 import { formatDate, todayStr, offsetDate } from '../../utils/index.js';
@@ -187,7 +186,6 @@ function VaccinationForm({ onClose }) {
 }
 
 export default function Health() {
-  const { species } = useApp();
   const [activeTab, setActiveTab]   = useState('treatments');
   const [showTreatForm, setShowTreatForm] = useState(false);
   const [showVacForm, setShowVacForm]     = useState(false);

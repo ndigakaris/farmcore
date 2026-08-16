@@ -73,7 +73,6 @@ export default function Finance() {
   const { formatCurrency, species } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState('income');
-  const [activeTab, setActiveTab] = useState('ledger');
   const [filterType, setFilterType] = useState('all');
 
   const transactions = useLiveQuery(() => db.transactions.orderBy('date').reverse().toArray(), []);
